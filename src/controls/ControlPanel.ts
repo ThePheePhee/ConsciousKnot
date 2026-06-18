@@ -17,6 +17,7 @@ export function createControlPanel(params: Params, onChange: () => void) {
   gui.add(params, 'globalSpeed', 0, 2, 0.01).name('speed');
   gui.add(params, 'transitionProgress', 0, 1, 0.001).name('transition').onChange(onChange);
   gui.add(params, 'autoTransitionSpeed', 0, 0.18, 0.001).name('auto cycle');
+  gui.add(params, 'cameraZoom', 0.45, 3.5, 0.01).name('zoom');
 
   const topology = gui.addFolder('Topology');
   topology.add(params, 'transitionPath', ['direct spherical', 'three-step spherical', 'local crossing']).name('move').onChange(onChange);
@@ -40,6 +41,8 @@ export function createControlPanel(params: Params, onChange: () => void) {
   developer.add(params, 'devCanonicalRelaxation', 0, 0.85, 0.01).name('settle first').onChange(onChange);
   developer.add(params, 'devIntermediateRelaxation', 0, 1, 0.01).name('settle between').onChange(onChange);
   developer.add(params, 'devSimultaneousUncrossings', 1, 5, 1).name('parallel crossings').onChange(onChange);
+  developer.add(params, 'devCrossingMode', ['projected intersections', 'hidden 4D passage']).name('crossing view').onChange(onChange);
+  developer.add(params, 'devHideDuringUncrossing', 0, 1, 0.01).name('hide passage').onChange(onChange);
   developer.add(params, 'devTwistEnabled').name('twisted ribbon').onChange(onChange);
   developer.add(params, 'devTwistTurns', -12, 12, 1).name('twist turns').onChange(onChange);
 

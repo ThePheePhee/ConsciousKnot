@@ -95,6 +95,8 @@ export function KnotScene() {
         canonicalRelaxation: params.devCanonicalRelaxation,
         intermediateRelaxation: params.devIntermediateRelaxation,
         simultaneousUncrossings: params.devSimultaneousUncrossings,
+        crossingMode: params.devCrossingMode,
+        hideDuringUncrossing: params.devHideDuringUncrossing,
         twistTurns: params.devTwistEnabled ? params.devTwistTurns : 0,
       });
       old.dispose();
@@ -230,6 +232,7 @@ export function KnotScene() {
       }
       camera.position.x = Math.sin(time * params.cameraOrbit) * 0.65;
       camera.position.y = Math.cos(time * params.cameraOrbit * 0.7) * 0.25;
+      camera.position.z = 5.5 / params.cameraZoom;
       camera.lookAt(0, 0, 0);
       composer.render();
     };

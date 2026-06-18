@@ -14,6 +14,7 @@ export type KnotKind =
   | 'customTorus';
 export type Mode = '3D Knot' | '4D Transition';
 export type TransitionPath = 'direct spherical' | 'three-step spherical' | 'local crossing';
+export type DevCrossingMode = 'projected intersections' | 'hidden 4D passage';
 export type DevKnotKind =
   | 'unknot'
   | 'trefoil31'
@@ -104,6 +105,7 @@ export interface Params {
   rotateYW: number;
   rotateZW: number;
   cameraOrbit: number;
+  cameraZoom: number;
   devSourceKnot: DevKnotKind;
   devMidKnot: DevKnotKind;
   devTargetKnot: DevKnotKind;
@@ -118,6 +120,8 @@ export interface Params {
   devCanonicalRelaxation: number;
   devIntermediateRelaxation: number;
   devSimultaneousUncrossings: number;
+  devCrossingMode: DevCrossingMode;
+  devHideDuringUncrossing: number;
   devTwistEnabled: boolean;
   devTwistTurns: number;
 }

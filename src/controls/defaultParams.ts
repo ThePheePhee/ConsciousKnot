@@ -57,6 +57,7 @@ export const defaultParams: Params = {
   rotateYW: 0.065,
   rotateZW: 0.04,
   cameraOrbit: 0.035,
+  cameraZoom: 1.0,
   devSourceKnot: 'unknot',
   devMidKnot: 'trefoil31',
   devTargetKnot: 'cinquefoil51',
@@ -71,6 +72,8 @@ export const defaultParams: Params = {
   devCanonicalRelaxation: 0.35,
   devIntermediateRelaxation: 0.55,
   devSimultaneousUncrossings: 1,
+  devCrossingMode: 'hidden 4D passage',
+  devHideDuringUncrossing: 0.92,
   devTwistEnabled: false,
   devTwistTurns: 0,
 };
