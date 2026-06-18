@@ -87,9 +87,18 @@ export function KnotScene() {
               {
                 ...common,
                 sourceKnot: params.sourceKnot,
+                midKnot: params.midKnot,
                 targetKnot: params.targetKnot,
+                transitionPath: params.transitionPath,
                 transitionProgress: params.transitionProgress,
                 liftAmplitude: params.liftAmplitude,
+                liftFrequency: params.liftFrequency,
+                sphereEnvelopeStrength: params.sphereEnvelopeStrength,
+                projectedSphereStrength: params.projectedSphereStrength,
+                localCrossingCenter: params.localCrossingCenter,
+                localCrossingWidth: params.localCrossingWidth,
+                localCrossingStrength: params.localCrossingStrength,
+                localFocusZoom: params.localFocusZoom,
                 projectionDistance4D: params.projectionDistance4D,
                 rotations: {
                   xy: time * params.rotateXY,

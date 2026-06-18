@@ -25,11 +25,20 @@ export function createControlPanel(params: Params, onChange: () => void) {
   mode3.add(params, 'slitherWaveCount', 1, 14, 1).name('slither waves').onChange(onChange);
 
   const mode4 = gui.addFolder('4D Transition Mode');
+  mode4.add(params, 'transitionPath', ['direct spherical', 'three-step spherical', 'local crossing']).name('trajectory').onChange(onChange);
   mode4.add(params, 'sourceKnot', knots).name('source knot').onChange(onChange);
+  mode4.add(params, 'midKnot', knots).name('mid knot').onChange(onChange);
   mode4.add(params, 'targetKnot', knots).name('target knot').onChange(onChange);
   mode4.add(params, 'transitionProgress', 0, 1, 0.001).name('transition').onChange(onChange);
   mode4.add(params, 'autoTransitionSpeed', 0, 0.4, 0.001).name('auto speed');
   mode4.add(params, 'liftAmplitude', 0, 2.5, 0.01).name('4D lift').onChange(onChange);
+  mode4.add(params, 'liftFrequency', 1, 18, 1).name('lift frequency').onChange(onChange);
+  mode4.add(params, 'sphereEnvelopeStrength', 0, 1, 0.01).name('R4 sphere lock').onChange(onChange);
+  mode4.add(params, 'projectedSphereStrength', 0, 1, 0.01).name('projected sphere').onChange(onChange);
+  mode4.add(params, 'localCrossingCenter', 0, 1, 0.001).name('crossing center').onChange(onChange);
+  mode4.add(params, 'localCrossingWidth', 0.02, 0.35, 0.001).name('crossing width').onChange(onChange);
+  mode4.add(params, 'localCrossingStrength', 0, 2, 0.01).name('crossing strength').onChange(onChange);
+  mode4.add(params, 'localFocusZoom', 0, 1, 0.01).name('local focus').onChange(onChange);
   mode4.add(params, 'projectionDistance4D', 2.2, 8, 0.01).name('projection d4').onChange(onChange);
   mode4.add(params, 'rotateXY', -0.6, 0.6, 0.001).name('XY speed');
   mode4.add(params, 'rotateXZ', -0.6, 0.6, 0.001).name('XZ speed');

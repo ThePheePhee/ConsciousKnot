@@ -13,6 +13,7 @@ export type KnotKind =
   | 'figureEight'
   | 'customTorus';
 export type Mode = '3D Knot' | '4D Transition';
+export type TransitionPath = 'direct spherical' | 'three-step spherical' | 'local crossing';
 
 export interface RibbonFrame {
   position: Vector3;
@@ -64,10 +65,19 @@ export interface Params {
   fibreDensity: number;
   fibreStrength: number;
   sourceKnot: KnotKind;
+  midKnot: KnotKind;
   targetKnot: KnotKind;
+  transitionPath: TransitionPath;
   transitionProgress: number;
   autoTransitionSpeed: number;
   liftAmplitude: number;
+  liftFrequency: number;
+  sphereEnvelopeStrength: number;
+  projectedSphereStrength: number;
+  localCrossingCenter: number;
+  localCrossingWidth: number;
+  localCrossingStrength: number;
+  localFocusZoom: number;
   projectionDistance4D: number;
   rotateXY: number;
   rotateXZ: number;
@@ -80,9 +90,18 @@ export interface Params {
 
 export interface Curve4DOptions extends CurveOptions {
   sourceKnot: KnotKind;
+  midKnot: KnotKind;
   targetKnot: KnotKind;
+  transitionPath: TransitionPath;
   transitionProgress: number;
   liftAmplitude: number;
+  liftFrequency: number;
+  sphereEnvelopeStrength: number;
+  projectedSphereStrength: number;
+  localCrossingCenter: number;
+  localCrossingWidth: number;
+  localCrossingStrength: number;
+  localFocusZoom: number;
   projectionDistance4D: number;
   rotations: Record<'xy' | 'xz' | 'xw' | 'yz' | 'yw' | 'zw', number>;
 }
