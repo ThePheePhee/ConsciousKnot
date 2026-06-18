@@ -2,9 +2,9 @@ import type { Params } from '../math/types';
 
 export const defaultParams: Params = {
   mode: '4D Transition',
-  sampleCount: 1650,
+  sampleCount: 1450,
   crossSamples: 30,
-  ribbonWidth: 0.17,
+  ribbonWidth: 0.19,
   edgeFlare: 1.32,
   spherizeAmount: 0.72,
   tipStrength: 1.0,
@@ -36,6 +36,11 @@ export const defaultParams: Params = {
   liftAmplitude: 0.64,
   liftFrequency: 7,
   sphereTightness: 0.94,
+  confineProjectedSphere: true,
+  confine4DSphere: false,
+  denseProjection: true,
+  densityPasses: 4,
+  densityPhaseSpread: 0.72,
   symmetryOrder: 5,
   phaseLockStrength: 0.85,
   phaseSearchSteps: 40,

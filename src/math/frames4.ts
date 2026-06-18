@@ -15,7 +15,7 @@ export function sampleCurve4D(options: Curve4DOptions): RibbonFrame[] {
   const midToTargetPhase = alignedPhase(options.midKnot, options.targetKnot, options);
 
   for (let i = 0; i < options.samples; i++) {
-    const t = (i / options.samples) * Math.PI * 2;
+    const t = (i / options.samples) * Math.PI * 2 + options.densityPhaseOffset;
     const source = sphericalKnot(options.sourceKnot, t, options);
     const target = sphericalKnot(options.targetKnot, t + sourceToTargetPhase, options);
     const mid = sphericalKnot(options.midKnot, t + sourceToMidPhase, options);
@@ -27,7 +27,9 @@ export function sampleCurve4D(options: Curve4DOptions): RibbonFrame[] {
           ? threeStepSpherical(source, mid, targetFromMid, a)
           : sphericalBlend(source, target, a);
     const envelope = sphericalEnvelopeRadius(t, options.tipStrength, options.symmetryOrder);
-    xyz.lerp(xyz.clone().normalize().multiplyScalar(envelope), options.sphereTightness);
+    if (options.confineProjectedSphere || options.confine4DSphere) {
+      xyz.lerp(xyz.clone().normalize().multiplyScalar(envelope), options.sphereTightness);
+    }
     const liftWindow =
       options.transitionPath === 'local crossing'
         ? localWindow(t / (Math.PI * 2), options.localCrossingCenter, options.localCrossingWidth)
@@ -37,10 +39,16 @@ export function sampleCurve4D(options: Curve4DOptions): RibbonFrame[] {
       liftWindow *
       Math.sin(Math.PI * a) *
       Math.sin(options.liftFrequency * t + options.time * 0.6 + 0.7 * Math.sin(5 * t));
-    const p4 = rotate4D(new Vector4(xyz.x, xyz.y, xyz.z, lift), options.rotations);
+    let p4 = rotate4D(new Vector4(xyz.x, xyz.y, xyz.z, lift), options.rotations);
+    if (options.confine4DSphere) {
+      const radius4 = Math.max(0.001, Math.hypot(p4.x, p4.y, p4.z, p4.w));
+      p4 = p4.multiplyScalar(envelope / radius4);
+    }
     const projected = project4Dto3D(p4, options.projectionDistance4D);
-    const projectedShell = projected.clone().normalize().multiplyScalar(envelope);
-    projected.lerp(projectedShell, Math.pow(options.sphereTightness, 1.35));
+    if (options.confineProjectedSphere) {
+      const projectedShell = projected.clone().normalize().multiplyScalar(envelope);
+      projected.lerp(projectedShell, Math.pow(options.sphereTightness, 1.35));
+    }
     if (liftWindow > 0.45) localFocusSamples.push(projected.clone());
     points3.push(projected);
   }
@@ -56,7 +64,7 @@ export function sampleCurve4D(options: Curve4DOptions): RibbonFrame[] {
     }
   }
 
-  recenterAndReshell(points3, options);
+  if (options.confineProjectedSphere) recenterAndReshell(points3, options);
 
   return buildFrames(points3, options.tipStrength);
 }

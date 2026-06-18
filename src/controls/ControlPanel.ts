@@ -20,10 +20,17 @@ export function createControlPanel(params: Params, onChange: () => void) {
   topology.add(params, 'symmetryOrder', 3, 12, 1).name('symmetry').onChange(onChange);
 
   const confinement = gui.addFolder('Spherical Confinement');
+  confinement.add(params, 'confineProjectedSphere').name('3D sphere').onChange(onChange);
+  confinement.add(params, 'confine4DSphere').name('4D sphere').onChange(onChange);
   confinement.add(params, 'sphereTightness', 0.65, 1, 0.01).name('sphere tightness').onChange(onChange);
   confinement.add(params, 'liftAmplitude', 0.15, 1.6, 0.01).name('4D lift').onChange(onChange);
   confinement.add(params, 'liftFrequency', 3, 16, 1).name('lift waves').onChange(onChange);
   confinement.add(params, 'ribbonWidth', 0.07, 0.24, 0.005).name('ribbon width').onChange(onChange);
+
+  const density = gui.addFolder('Occluding Weave');
+  density.add(params, 'denseProjection').name('dense mode').onChange(onChange);
+  density.add(params, 'densityPasses', 1, 7, 1).name('passes').onFinishChange(onChange);
+  density.add(params, 'densityPhaseSpread', 0, 1, 0.01).name('spread').onChange(onChange);
 
   const local = gui.addFolder('Local Crossing Study');
   local.add(params, 'localCrossingCenter', 0, 1, 0.001).name('center').onChange(onChange);
@@ -37,5 +44,11 @@ export function createControlPanel(params: Params, onChange: () => void) {
   presentation.add(params, 'rotationZ', -0.18, 0.18, 0.001).name('roll drift');
   presentation.add(params, 'diamondLightStrength', 0, 5, 0.01).name('inner light');
   presentation.add(params, 'bloomStrength', 0, 1.2, 0.01).name('bloom');
+
+  const surface = gui.addFolder('Ribbon Shader');
+  surface.add(params, 'oilSlickStrength', 0, 2, 0.01).name('oil slick');
+  surface.add(params, 'fractalStrength', 0, 1.5, 0.01).name('fractal surface');
+  surface.add(params, 'fibreDensity', 10, 180, 1).name('fibre density');
+  surface.add(params, 'fibreStrength', 0, 1.5, 0.01).name('fibre strength');
   return gui;
 }

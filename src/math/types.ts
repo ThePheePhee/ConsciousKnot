@@ -73,6 +73,11 @@ export interface Params {
   liftAmplitude: number;
   liftFrequency: number;
   sphereTightness: number;
+  confineProjectedSphere: boolean;
+  confine4DSphere: boolean;
+  denseProjection: boolean;
+  densityPasses: number;
+  densityPhaseSpread: number;
   symmetryOrder: number;
   phaseLockStrength: number;
   phaseSearchSteps: number;
@@ -99,6 +104,12 @@ export interface Curve4DOptions extends CurveOptions {
   liftAmplitude: number;
   liftFrequency: number;
   sphereTightness: number;
+  confineProjectedSphere: boolean;
+  confine4DSphere: boolean;
+  denseProjection: boolean;
+  densityPasses: number;
+  densityPhaseSpread: number;
+  densityPhaseOffset: number;
   symmetryOrder: number;
   phaseLockStrength: number;
   phaseSearchSteps: number;
