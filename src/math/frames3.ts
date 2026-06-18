@@ -22,6 +22,7 @@ export function sampleCurve3D(options: CurveOptions): RibbonFrame[] {
 export function buildFrames(points: Vector3[], tipStrength: number): RibbonFrame[] {
   const n = points.length;
   const tangents = points.map((p, i) => points[(i + 1) % n].clone().sub(points[(i - 1 + n) % n]).normalize());
+  const transportedNormals: Vector3[] = [];
   const frames: RibbonFrame[] = [];
   let normal = new Vector3(0, 0, 1).cross(tangents[0]).normalize();
   if (normal.lengthSq() < 0.001) normal = new Vector3(1, 0, 0);
@@ -38,13 +39,25 @@ export function buildFrames(points: Vector3[], tipStrength: number): RibbonFrame
     }
     const tangent = tangents[i].clone();
     normal.sub(tangent.clone().multiplyScalar(normal.dot(tangent))).normalize();
-    const binormal = tangent.clone().cross(normal).normalize();
+    transportedNormals.push(normal.clone());
+  }
+
+  const startNormal = transportedNormals[0].clone().sub(tangents[0].clone().multiplyScalar(transportedNormals[0].dot(tangents[0]))).normalize();
+  const endNormal = transportedNormals[n - 1].clone().sub(tangents[0].clone().multiplyScalar(transportedNormals[n - 1].dot(tangents[0]))).normalize();
+  const twistSign = Math.sign(tangents[0].dot(endNormal.clone().cross(startNormal))) || 1;
+  const closureTwist = twistSign * Math.acos(Math.max(-1, Math.min(1, endNormal.dot(startNormal))));
+
+  for (let i = 0; i < n; i++) {
+    const tangent = tangents[i].clone();
+    const correctedNormal = transportedNormals[i].clone().applyAxisAngle(tangent, (closureTwist * i) / Math.max(1, n - 1));
+    correctedNormal.sub(tangent.clone().multiplyScalar(correctedNormal.dot(tangent))).normalize();
+    const binormal = tangent.clone().cross(correctedNormal).normalize();
     const outward = points[i].clone().normalize();
     const theta = (i / n) * Math.PI * 2;
     frames.push({
       position: points[i],
       tangent,
-      normal,
+      normal: correctedNormal,
       binormal,
       outward,
       pinch: pinchWeight(theta, tipStrength),

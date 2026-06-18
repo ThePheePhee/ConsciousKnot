@@ -45,11 +45,12 @@ void main() {
   float edge = pow(abs(vUv.y * 2.0 - 1.0), 3.1);
   float cell = noise(vUv * vec2(180.0, 28.0) + vec2(time * 0.05, time * 0.03));
   float cellFine = noise(vUv * vec2(520.0, 88.0) - time * 0.04);
+  float x = vUv.x * 6.28318;
   float interference = sin(vUv.x * colorScale * 6.28318 + cell * 3.2 + time * colorSpeed);
-  float strandPhase = vUv.y * fibreDensity * 6.28318 + 0.35 * sin(vUv.x * 54.0 + time * 0.18) + cellFine * 3.5;
+  float strandPhase = vUv.y * fibreDensity * 6.28318 + 0.35 * sin(x * 9.0 + time * 0.18) + cellFine * 3.5;
   float strands = pow(0.5 + 0.5 * sin(strandPhase), 18.0);
   float strandGroove = pow(0.5 + 0.5 * cos(strandPhase), 4.0);
-  float longitudinal = vUv.x * colorScale + 0.18 * sin(vUv.x * 47.0 + time * 0.18) + 0.12 * interference;
+  float longitudinal = vUv.x * colorScale + 0.18 * sin(x * 8.0 + time * 0.18) + 0.12 * interference;
   vec3 oil = palette(longitudinal) * (0.55 + oilSlickStrength * 0.58);
   vec3 strandColor = palette(longitudinal + vUv.y * 1.4 + cellFine * 0.22);
   vec3 micro = mix(vec3(0.78), vec3(0.45, 0.72, 0.96) + 0.48 * palette(longitudinal + 0.2), fractalStrength * (0.26 + 0.52 * cell));

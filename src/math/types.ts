@@ -9,6 +9,7 @@ export type KnotKind =
   | 'torus85'
   | 'torus118'
   | 'torus137'
+  | 'consciousOrb'
   | 'figureEight'
   | 'customTorus';
 export type Mode = '3D Knot' | '4D Transition';

@@ -15,7 +15,7 @@ export function createRibbonMaterial(params: Params) {
       fibreStrength: { value: params.fibreStrength },
       lightStrength: { value: params.diamondLightStrength },
       colorSpeed: { value: 0.18 },
-      colorScale: { value: 8.5 },
+      colorScale: { value: 12.0 },
       corePosition: { value: new Vector3() },
     },
   });
@@ -25,7 +25,7 @@ export function createCore(size: number) {
   const material = new MeshBasicMaterial({
     color: 0xffffff,
     transparent: true,
-    opacity: 0.52,
+    opacity: 0.0,
     blending: AdditiveBlending,
     depthWrite: false,
   });

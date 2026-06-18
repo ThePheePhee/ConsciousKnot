@@ -4,7 +4,7 @@ export function spherizePoint(point: Vector3, amount: number, tipStrength: numbe
   const radius = point.length();
   const sphereRadius = 1.42 + 0.16 * Math.sin(10 * theta) * tipStrength + 0.05 * Math.sin(5 * theta + Math.PI / 5);
   const shell = point.clone().normalize().multiplyScalar(sphereRadius);
-  const compact = point.clone().multiplyScalar(0.58 + 0.08 * Math.cos(5 * theta));
+  const compact = point.clone().multiplyScalar(0.62 + 0.08 * Math.cos(5 * theta));
   return compact.lerp(shell, amount).multiplyScalar(1 + 0.018 * Math.sin(10 * theta + radius));
 }
 

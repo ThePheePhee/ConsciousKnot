@@ -48,7 +48,6 @@ export function buildRibbonMesh3D(frames: RibbonFrame[], width: number, edgeFlar
   geometry.setAttribute('normal', new BufferAttribute(new Float32Array(normals), 3));
   geometry.setAttribute('uv', new BufferAttribute(new Float32Array(uvs), 2));
   geometry.setIndex(indices);
-  geometry.computeVertexNormals();
   geometry.computeBoundingSphere();
   return geometry;
 }

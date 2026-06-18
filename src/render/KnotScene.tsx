@@ -55,10 +55,11 @@ export function KnotScene() {
     scene.add(knot);
 
     const core = createCore(params.coreSize);
+    core.visible = false;
     scene.add(core);
     const sparkleMaterial = new MeshBasicMaterial({ color: 0xeef8ff, transparent: true, opacity: 0.48, blending: AdditiveBlending });
-    const sparkles = Array.from({ length: 10 }, (_, i) => {
-      const s = new Mesh(new SphereGeometry(0.017, 12, 8), sparkleMaterial);
+    const sparkles = Array.from({ length: 6 }, (_, i) => {
+      const s = new Mesh(new SphereGeometry(0.012, 12, 8), sparkleMaterial);
       const a = (i / 10) * Math.PI * 2;
       s.position.set(Math.cos(a) * 1.75, Math.sin(a) * 1.75, 0.12 * Math.sin(5 * a));
       scene.add(s);
