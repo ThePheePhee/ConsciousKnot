@@ -15,12 +15,14 @@ import {
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
-import { buildRibbonMesh4D } from '../geometry/buildRibbonMesh4D';
+import { buildParametricRibbonGeometry } from '../geometry/buildParametricRibbonGeometry';
 import { createControlPanel } from '../controls/ControlPanel';
 import { defaultParams } from '../controls/defaultParams';
-import { createCore, createRibbonMaterial } from './materials';
+import { createCore, createRibbonMaterial, knotKindId, transitionPathId } from './materials';
 import { addLights } from './lights';
-import type { Params } from '../math/types';
+import { knotPoint } from '../math/knots';
+import { spherizePoint } from '../math/spherize';
+import type { KnotKind, Params } from '../math/types';
 
 export function KnotScene() {
   const mountRef = useRef<HTMLDivElement | null>(null);
@@ -51,6 +53,10 @@ export function KnotScene() {
     const material = createRibbonMaterial(params);
     const knot = new Mesh(new BufferGeometry(), material);
     scene.add(knot);
+    let phaseCacheKey = '';
+    let phaseSourceMid = 0;
+    let phaseSourceTarget = 0;
+    let phaseMidTarget = 0;
 
     const core = createCore(params.coreSize);
     core.visible = false;
@@ -66,59 +72,71 @@ export function KnotScene() {
 
     const updateGeometry = () => {
       const old = knot.geometry;
-      const samples = Math.round(params.sampleCount);
-      const common = {
-        knot: params.knotType,
-        torusP: params.torusP,
-        torusQ: params.torusQ,
-        samples,
-        time,
-        slitherAmplitude: params.slitherAmplitude,
-        slitherSpeed: params.slitherSpeed,
-        slitherWaveCount: params.slitherWaveCount,
-        spherizeAmount: params.spherizeAmount,
-        tipStrength: params.tipStrength,
-      };
-      knot.geometry = buildRibbonMesh4D(
-        {
-          ...common,
-          sourceKnot: params.sourceKnot,
-          midKnot: params.midKnot,
-          targetKnot: params.targetKnot,
-          transitionPath: params.transitionPath,
-          transitionProgress: params.transitionProgress,
-          liftAmplitude: params.liftAmplitude,
-          liftFrequency: params.liftFrequency,
-          sphereTightness: params.sphereTightness,
-          confineProjectedSphere: params.confineProjectedSphere,
-          confine4DSphere: params.confine4DSphere,
-          denseProjection: params.denseProjection,
-          densityPasses: params.densityPasses,
-          densityPhaseSpread: params.densityPhaseSpread,
-          densityPhaseOffset: 0,
-          symmetryOrder: params.symmetryOrder,
-          phaseLockStrength: params.phaseLockStrength,
-          phaseSearchSteps: params.phaseSearchSteps,
-          localCrossingCenter: params.localCrossingCenter,
-          localCrossingWidth: params.localCrossingWidth,
-          localCrossingStrength: params.localCrossingStrength,
-          localFocusZoom: params.localFocusZoom,
-          projectionDistance4D: params.projectionDistance4D,
-          rotations: {
-            xy: time * params.rotateXY,
-            xz: time * params.rotateXZ,
-            xw: time * params.rotateXW,
-            yz: time * params.rotateYZ,
-            yw: time * params.rotateYW,
-            zw: time * params.rotateZW,
-          },
-        },
-        params.ribbonWidth,
-        params.edgeFlare,
-        Math.round(params.crossSamples),
-      );
+      const passes = params.denseProjection ? Math.round(params.densityPasses) : 1;
+      knot.geometry = buildParametricRibbonGeometry(Math.round(params.sampleCount), Math.round(params.crossSamples), passes);
       old.dispose();
       dirty = false;
+    };
+
+    const updateUniforms = () => {
+      const nextPhaseKey = [
+        params.sourceKnot,
+        params.midKnot,
+        params.targetKnot,
+        params.torusP,
+        params.torusQ,
+        params.tipStrength,
+        params.symmetryOrder,
+        params.phaseLockStrength,
+        params.phaseSearchSteps,
+      ].join('|');
+      if (nextPhaseKey !== phaseCacheKey) {
+        phaseCacheKey = nextPhaseKey;
+        phaseSourceMid = alignedPhase(params.sourceKnot, params.midKnot, params);
+        phaseSourceTarget = alignedPhase(params.sourceKnot, params.targetKnot, params);
+        phaseMidTarget = alignedPhase(params.midKnot, params.targetKnot, params);
+      }
+      const uniforms = material.uniforms;
+      uniforms.time.value = time;
+      uniforms.oilSlickStrength.value = params.oilSlickStrength;
+      uniforms.fractalStrength.value = params.fractalStrength;
+      uniforms.fibreDensity.value = params.fibreDensity;
+      uniforms.fibreStrength.value = params.fibreStrength;
+      uniforms.lightStrength.value = params.diamondLightStrength;
+      uniforms.corePosition.value = core.position;
+      uniforms.transitionProgress.value = params.transitionProgress;
+      uniforms.sourceKind.value = knotKindId(params.sourceKnot);
+      uniforms.midKind.value = knotKindId(params.midKnot);
+      uniforms.targetKind.value = knotKindId(params.targetKnot);
+      uniforms.transitionPath.value = transitionPathId(params.transitionPath);
+      uniforms.torusP.value = params.torusP;
+      uniforms.torusQ.value = params.torusQ;
+      uniforms.ribbonWidth.value = params.ribbonWidth;
+      uniforms.edgeFlare.value = params.edgeFlare;
+      uniforms.tipStrength.value = params.tipStrength;
+      uniforms.liftAmplitude.value = params.liftAmplitude;
+      uniforms.liftFrequency.value = params.liftFrequency;
+      uniforms.sphereTightness.value = params.sphereTightness;
+      uniforms.confineProjectedSphere.value = params.confineProjectedSphere ? 1 : 0;
+      uniforms.confine4DSphere.value = params.confine4DSphere ? 1 : 0;
+      uniforms.denseProjection.value = params.denseProjection ? 1 : 0;
+      uniforms.densityPasses.value = params.denseProjection ? Math.round(params.densityPasses) : 1;
+      uniforms.densityPhaseSpread.value = params.densityPhaseSpread;
+      uniforms.symmetryOrder.value = Math.round(params.symmetryOrder);
+      uniforms.phaseSourceMid.value = phaseSourceMid;
+      uniforms.phaseSourceTarget.value = phaseSourceTarget;
+      uniforms.phaseMidTarget.value = phaseMidTarget;
+      uniforms.localCrossingCenter.value = params.localCrossingCenter;
+      uniforms.localCrossingWidth.value = params.localCrossingWidth;
+      uniforms.localCrossingStrength.value = params.localCrossingStrength;
+      uniforms.localFocusZoom.value = params.localFocusZoom;
+      uniforms.projectionDistance4D.value = params.projectionDistance4D;
+      uniforms.rotateXY.value = time * params.rotateXY;
+      uniforms.rotateXZ.value = time * params.rotateXZ;
+      uniforms.rotateXW.value = time * params.rotateXW;
+      uniforms.rotateYZ.value = time * params.rotateYZ;
+      uniforms.rotateYW.value = time * params.rotateYW;
+      uniforms.rotateZW.value = time * params.rotateZW;
     };
 
     const gui = createControlPanel(params, () => {
@@ -149,9 +167,7 @@ export function KnotScene() {
       frame++;
       if (params.autoTransitionSpeed > 0) {
         params.transitionProgress = 0.5 + 0.5 * Math.sin(time * params.autoTransitionSpeed);
-        dirty = dirty || speed > 0;
       }
-      if (speed > 0) dirty = true;
       if (dirty) updateGeometry();
 
       knot.rotation.x += params.rotationX * 0.62 * delta * speed;
@@ -159,13 +175,7 @@ export function KnotScene() {
       knot.rotation.z += params.rotationZ * 0.62 * delta * speed;
       core.rotation.y -= 0.5 * delta * speed;
       core.scale.setScalar(params.coreSize / 0.42);
-      material.uniforms.time.value = time;
-      material.uniforms.oilSlickStrength.value = params.oilSlickStrength;
-      material.uniforms.fractalStrength.value = params.fractalStrength;
-      material.uniforms.fibreDensity.value = params.fibreDensity;
-      material.uniforms.fibreStrength.value = params.fibreStrength;
-      material.uniforms.lightStrength.value = params.diamondLightStrength;
-      material.uniforms.corePosition.value = core.position;
+      updateUniforms();
       bloom.strength = params.bloomStrength;
       bloom.radius = 0.34;
       bloom.threshold = 0.72;
@@ -204,4 +214,30 @@ export function KnotScene() {
       <div ref={mountRef} style={{ width: '100vw', height: '100vh' }} />
     </>
   );
+}
+
+function alignedPhase(sourceKind: KnotKind, targetKind: KnotKind, params: Params) {
+  if (params.phaseLockStrength <= 0) return 0;
+  const steps = Math.max(8, Math.round(params.phaseSearchSteps));
+  const probes = 56;
+  const symmetry = Math.max(3, Math.round(params.symmetryOrder));
+  let bestPhase = 0;
+  let bestScore = Number.POSITIVE_INFINITY;
+
+  for (let s = 0; s < steps; s++) {
+    const phase = (s / steps) * Math.PI * 2;
+    let score = 0;
+    for (let i = 0; i < probes; i++) {
+      const t = (i / probes) * Math.PI * 2;
+      const a = spherizePoint(knotPoint(sourceKind, t, params.torusP, params.torusQ), 1, params.tipStrength, t).normalize();
+      const b = spherizePoint(knotPoint(targetKind, t + phase, params.torusP, params.torusQ), 1, params.tipStrength, t + phase).normalize();
+      score += 1 - a.dot(b) + 0.035 * (1 - Math.cos(symmetry * phase));
+    }
+    if (score < bestScore) {
+      bestScore = score;
+      bestPhase = phase;
+    }
+  }
+
+  return bestPhase * params.phaseLockStrength;
 }
