@@ -72,8 +72,10 @@ export interface Params {
   autoTransitionSpeed: number;
   liftAmplitude: number;
   liftFrequency: number;
-  sphereEnvelopeStrength: number;
-  projectedSphereStrength: number;
+  sphereTightness: number;
+  symmetryOrder: number;
+  phaseLockStrength: number;
+  phaseSearchSteps: number;
   localCrossingCenter: number;
   localCrossingWidth: number;
   localCrossingStrength: number;
@@ -96,8 +98,10 @@ export interface Curve4DOptions extends CurveOptions {
   transitionProgress: number;
   liftAmplitude: number;
   liftFrequency: number;
-  sphereEnvelopeStrength: number;
-  projectedSphereStrength: number;
+  sphereTightness: number;
+  symmetryOrder: number;
+  phaseLockStrength: number;
+  phaseSearchSteps: number;
   localCrossingCenter: number;
   localCrossingWidth: number;
   localCrossingStrength: number;

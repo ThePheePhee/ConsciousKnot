@@ -15,8 +15,6 @@ import {
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
-import { sampleCurve3D } from '../math/frames3';
-import { buildRibbonMesh3D } from '../geometry/buildRibbonMesh3D';
 import { buildRibbonMesh4D } from '../geometry/buildRibbonMesh4D';
 import { createControlPanel } from '../controls/ControlPanel';
 import { defaultParams } from '../controls/defaultParams';
@@ -81,39 +79,38 @@ export function KnotScene() {
         spherizeAmount: params.spherizeAmount,
         tipStrength: params.tipStrength,
       };
-      knot.geometry =
-        params.mode === '4D Transition'
-          ? buildRibbonMesh4D(
-              {
-                ...common,
-                sourceKnot: params.sourceKnot,
-                midKnot: params.midKnot,
-                targetKnot: params.targetKnot,
-                transitionPath: params.transitionPath,
-                transitionProgress: params.transitionProgress,
-                liftAmplitude: params.liftAmplitude,
-                liftFrequency: params.liftFrequency,
-                sphereEnvelopeStrength: params.sphereEnvelopeStrength,
-                projectedSphereStrength: params.projectedSphereStrength,
-                localCrossingCenter: params.localCrossingCenter,
-                localCrossingWidth: params.localCrossingWidth,
-                localCrossingStrength: params.localCrossingStrength,
-                localFocusZoom: params.localFocusZoom,
-                projectionDistance4D: params.projectionDistance4D,
-                rotations: {
-                  xy: time * params.rotateXY,
-                  xz: time * params.rotateXZ,
-                  xw: time * params.rotateXW,
-                  yz: time * params.rotateYZ,
-                  yw: time * params.rotateYW,
-                  zw: time * params.rotateZW,
-                },
-              },
-              params.ribbonWidth,
-              params.edgeFlare,
-              Math.round(params.crossSamples),
-            )
-          : buildRibbonMesh3D(sampleCurve3D(common), params.ribbonWidth, params.edgeFlare, Math.round(params.crossSamples));
+      knot.geometry = buildRibbonMesh4D(
+        {
+          ...common,
+          sourceKnot: params.sourceKnot,
+          midKnot: params.midKnot,
+          targetKnot: params.targetKnot,
+          transitionPath: params.transitionPath,
+          transitionProgress: params.transitionProgress,
+          liftAmplitude: params.liftAmplitude,
+          liftFrequency: params.liftFrequency,
+          sphereTightness: params.sphereTightness,
+          symmetryOrder: params.symmetryOrder,
+          phaseLockStrength: params.phaseLockStrength,
+          phaseSearchSteps: params.phaseSearchSteps,
+          localCrossingCenter: params.localCrossingCenter,
+          localCrossingWidth: params.localCrossingWidth,
+          localCrossingStrength: params.localCrossingStrength,
+          localFocusZoom: params.localFocusZoom,
+          projectionDistance4D: params.projectionDistance4D,
+          rotations: {
+            xy: time * params.rotateXY,
+            xz: time * params.rotateXZ,
+            xw: time * params.rotateXW,
+            yz: time * params.rotateYZ,
+            yw: time * params.rotateYW,
+            zw: time * params.rotateZW,
+          },
+        },
+        params.ribbonWidth,
+        params.edgeFlare,
+        Math.round(params.crossSamples),
+      );
       old.dispose();
       dirty = false;
     };
@@ -144,12 +141,11 @@ export function KnotScene() {
       const speed = params.paused ? 0 : params.globalSpeed;
       time += delta * speed;
       frame++;
-      if (params.mode === '4D Transition' && params.autoTransitionSpeed > 0) {
+      if (params.autoTransitionSpeed > 0) {
         params.transitionProgress = 0.5 + 0.5 * Math.sin(time * params.autoTransitionSpeed);
         dirty = dirty || speed > 0;
       }
-      if (speed > 0 && params.slitherAmplitude > 0.001 && frame % 2 === 0) dirty = true;
-      if (speed > 0 && params.mode === '4D Transition') dirty = true;
+      if (speed > 0) dirty = true;
       if (dirty) updateGeometry();
 
       knot.rotation.x += params.rotationX * 0.62 * delta * speed;
@@ -197,7 +193,7 @@ export function KnotScene() {
     <>
       <div className="brand">
         <h1>ConsciousKnot</h1>
-        <p>Procedural framed ribbon knots in 3D and projected 4D, tuned for dense luminous oil-slick geometry.</p>
+        <p>Projected 4D rearrangements of spherical ribbon knots, constrained to stay dense, smooth, and luminous.</p>
       </div>
       <div ref={mountRef} style={{ width: '100vw', height: '100vh' }} />
     </>
