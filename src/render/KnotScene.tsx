@@ -46,7 +46,7 @@ export function KnotScene() {
 
     const composer = new EffectComposer(renderer);
     composer.addPass(new RenderPass(scene, camera));
-    const bloom = new UnrealBloomPass(new Vector2(mount.clientWidth, mount.clientHeight), params.bloomStrength, 0.6, 0.08);
+    const bloom = new UnrealBloomPass(new Vector2(mount.clientWidth, mount.clientHeight), params.bloomStrength, 0.36, 0.72);
     composer.addPass(bloom);
 
     addLights(scene);
@@ -56,9 +56,9 @@ export function KnotScene() {
 
     const core = createCore(params.coreSize);
     scene.add(core);
-    const sparkleMaterial = new MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.8, blending: AdditiveBlending });
+    const sparkleMaterial = new MeshBasicMaterial({ color: 0xeef8ff, transparent: true, opacity: 0.48, blending: AdditiveBlending });
     const sparkles = Array.from({ length: 10 }, (_, i) => {
-      const s = new Mesh(new SphereGeometry(0.026, 12, 8), sparkleMaterial);
+      const s = new Mesh(new SphereGeometry(0.017, 12, 8), sparkleMaterial);
       const a = (i / 10) * Math.PI * 2;
       s.position.set(Math.cos(a) * 1.75, Math.sin(a) * 1.75, 0.12 * Math.sin(5 * a));
       scene.add(s);
@@ -150,6 +150,8 @@ export function KnotScene() {
       material.uniforms.lightStrength.value = params.diamondLightStrength;
       material.uniforms.corePosition.value = core.position;
       bloom.strength = params.bloomStrength;
+      bloom.radius = 0.34;
+      bloom.threshold = 0.72;
       const light = scene.getObjectByName('diamondLight');
       if (light && 'intensity' in light) light.intensity = params.diamondLightStrength;
       for (let i = 0; i < sparkles.length; i++) {

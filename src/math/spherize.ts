@@ -2,10 +2,10 @@ import { Vector3 } from 'three';
 
 export function spherizePoint(point: Vector3, amount: number, tipStrength: number, theta: number): Vector3 {
   const radius = point.length();
-  const sphereRadius = 1.55 + 0.12 * Math.sin(10 * theta) * tipStrength + 0.035 * Math.sin(5 * theta + Math.PI / 5);
+  const sphereRadius = 1.42 + 0.16 * Math.sin(10 * theta) * tipStrength + 0.05 * Math.sin(5 * theta + Math.PI / 5);
   const shell = point.clone().normalize().multiplyScalar(sphereRadius);
-  const compact = point.clone().multiplyScalar(0.72 + 0.09 * Math.cos(5 * theta));
-  return compact.lerp(shell, amount).multiplyScalar(1 + 0.02 * Math.sin(10 * theta + radius));
+  const compact = point.clone().multiplyScalar(0.58 + 0.08 * Math.cos(5 * theta));
+  return compact.lerp(shell, amount).multiplyScalar(1 + 0.018 * Math.sin(10 * theta + radius));
 }
 
 export function pinchWeight(theta: number, strength: number): number {

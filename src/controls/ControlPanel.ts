@@ -7,17 +7,17 @@ export function createControlPanel(params: Params, onChange: () => void) {
   const knots = Object.fromEntries(Object.entries(knotLabels).map(([key, value]) => [value, key]));
 
   gui.add(params, 'mode', ['3D Knot', '4D Transition']).name('mode').onChange(onChange);
-  gui.add(params, 'sampleCount', 180, 820, 1).name('sample count').onFinishChange(onChange);
-  gui.add(params, 'crossSamples', 8, 32, 1).name('ribbon samples').onFinishChange(onChange);
-  gui.add(params, 'ribbonWidth', 0.05, 0.42, 0.01).name('ribbon width').onChange(onChange);
+  gui.add(params, 'sampleCount', 220, 1800, 1).name('sample count').onFinishChange(onChange);
+  gui.add(params, 'crossSamples', 8, 40, 1).name('ribbon samples').onFinishChange(onChange);
+  gui.add(params, 'ribbonWidth', 0.035, 0.34, 0.005).name('ribbon width').onChange(onChange);
   gui.add(params, 'edgeFlare', 0, 2.6, 0.01).name('edge flare').onChange(onChange);
   gui.add(params, 'spherizeAmount', 0, 1, 0.01).name('spherize').onChange(onChange);
   gui.add(params, 'tipStrength', 0, 1.5, 0.01).name('ten-tip strength').onChange(onChange);
 
   const mode3 = gui.addFolder('3D Knot Mode');
   mode3.add(params, 'knotType', knots).name('knot type').onChange(onChange);
-  mode3.add(params, 'torusP', 1, 9, 1).name('torus p').onChange(onChange);
-  mode3.add(params, 'torusQ', 1, 9, 1).name('torus q').onChange(onChange);
+  mode3.add(params, 'torusP', 1, 19, 1).name('torus p').onChange(onChange);
+  mode3.add(params, 'torusQ', 1, 19, 1).name('torus q').onChange(onChange);
   mode3.add(params, 'slitherAmplitude', 0, 0.7, 0.01).name('slither amplitude').onChange(onChange);
   mode3.add(params, 'slitherSpeed', 0, 2.4, 0.01).name('slither speed');
   mode3.add(params, 'slitherWaveCount', 1, 14, 1).name('slither waves').onChange(onChange);

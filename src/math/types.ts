@@ -1,6 +1,16 @@
 import type { Vector3, Vector4 } from 'three';
 
-export type KnotKind = 'unknot' | 'trefoil' | 'cinquefoil' | 'torus34' | 'torus53' | 'figureEight' | 'customTorus';
+export type KnotKind =
+  | 'unknot'
+  | 'trefoil'
+  | 'cinquefoil'
+  | 'torus34'
+  | 'torus53'
+  | 'torus85'
+  | 'torus118'
+  | 'torus137'
+  | 'figureEight'
+  | 'customTorus';
 export type Mode = '3D Knot' | '4D Transition';
 
 export interface RibbonFrame {

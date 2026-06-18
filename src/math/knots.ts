@@ -13,6 +13,12 @@ export function knotPoint(kind: KnotKind, theta: number, p = 5, q = 3): Vector3 
       return torusPoint(theta, 3, 4, 1.12, 0.77);
     case 'torus53':
       return torusPoint(theta, 5, 3, 1.08, 0.82);
+    case 'torus85':
+      return torusPoint(theta, 8, 5, 1.02, 0.9);
+    case 'torus118':
+      return torusPoint(theta, 11, 8, 0.98, 0.93);
+    case 'torus137':
+      return torusPoint(theta, 13, 7, 0.98, 0.94);
     case 'figureEight':
       return figureEight(theta);
     case 'customTorus':
@@ -40,6 +46,9 @@ export const knotLabels: Record<KnotKind, string> = {
   cinquefoil: 'Cinquefoil T(2,5)',
   torus34: 'Torus T(3,4)',
   torus53: 'Torus T(5,3)',
+  torus85: 'Dense T(8,5)',
+  torus118: 'Dense T(11,8)',
+  torus137: 'Dense T(13,7)',
   figureEight: 'Figure-eight',
   customTorus: 'Custom torus',
 };
