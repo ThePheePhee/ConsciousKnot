@@ -14,7 +14,16 @@ export type KnotKind =
   | 'customTorus';
 export type Mode = '3D Knot' | '4D Transition';
 export type TransitionPath = 'direct spherical' | 'three-step spherical' | 'local crossing';
-export type DevKnotKind = 'unknot' | 'trefoil31' | 'figureEight41' | 'cinquefoil51' | 'twist52' | 'stevedore61' | 'sixTwo62' | 'sixThree63';
+export type DevKnotKind =
+  | 'unknot'
+  | 'trefoil31'
+  | 'figureEight41'
+  | 'cinquefoil51'
+  | 'twist52'
+  | 'stevedore61'
+  | 'sixTwo62'
+  | 'sixThree63'
+  | 'sevenOne71';
 
 export interface RibbonFrame {
   position: Vector3;
@@ -98,12 +107,17 @@ export interface Params {
   devSourceKnot: DevKnotKind;
   devMidKnot: DevKnotKind;
   devTargetKnot: DevKnotKind;
+  devFourthKnot: DevKnotKind;
+  devTrajectorySize: number;
   devTransitionPath: TransitionPath;
   devSampleCount: number;
   devCrossSamples: number;
   devRibbonWidth: number;
   devLiftAmplitude: number;
   devProjectionDistance4D: number;
+  devCanonicalRelaxation: number;
+  devIntermediateRelaxation: number;
+  devSimultaneousUncrossings: number;
   devTwistEnabled: boolean;
   devTwistTurns: number;
 }

@@ -10,6 +10,7 @@ export const devKnotLabels: Record<DevKnotKind, string> = {
   stevedore61: '6_1 stevedore',
   sixTwo62: '6_2',
   sixThree63: '6_3',
+  sevenOne71: '7_1 septafoil',
 };
 
 export function devKnotPoint(kind: DevKnotKind, t: number): Vector3 {
@@ -46,6 +47,8 @@ export function devKnotPoint(kind: DevKnotKind, t: number): Vector3 {
         [0.85, 4, 0.24, 7],
         [0.62, 5, -0.2, 2],
       ]);
+    case 'sevenOne71':
+      return torus(t, 2, 7, 1.0, 0.53).multiplyScalar(0.94);
   }
 }
 

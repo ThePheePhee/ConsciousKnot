@@ -7,8 +7,12 @@ export function createControlPanel(params: Params, onChange: () => void) {
   const gui = new GUI({ title: '4D Knot Rearrangement', width: 340 });
   const knots = Object.fromEntries(Object.entries(knotLabels).map(([key, value]) => [value, key]));
   const devKnots = Object.fromEntries(Object.entries(devKnotLabels).map(([key, value]) => [value, key]));
+  const changed = () => {
+    onChange();
+    updateVisibility();
+  };
 
-  gui.add(params, 'developerMode').name('developer mode').onChange(onChange);
+  gui.add(params, 'developerMode').name('developer mode').onChange(changed);
   gui.add(params, 'paused').name('pause');
   gui.add(params, 'globalSpeed', 0, 2, 0.01).name('speed');
   gui.add(params, 'transitionProgress', 0, 1, 0.001).name('transition').onChange(onChange);
@@ -23,15 +27,19 @@ export function createControlPanel(params: Params, onChange: () => void) {
   topology.add(params, 'symmetryOrder', 3, 12, 1).name('symmetry').onChange(onChange);
 
   const developer = gui.addFolder('Developer Mode');
-  developer.add(params, 'devTransitionPath', ['direct spherical', 'three-step spherical']).name('trajectory').onChange(onChange);
-  developer.add(params, 'devSourceKnot', devKnots).name('source').onChange(onChange);
-  developer.add(params, 'devMidKnot', devKnots).name('via').onChange(onChange);
-  developer.add(params, 'devTargetKnot', devKnots).name('target').onChange(onChange);
+  developer.add(params, 'devTrajectorySize', 1, 4, 1).name('trajectory knots').onChange(onChange);
+  developer.add(params, 'devSourceKnot', devKnots).name('knot 1').onChange(onChange);
+  developer.add(params, 'devMidKnot', devKnots).name('knot 2').onChange(onChange);
+  developer.add(params, 'devTargetKnot', devKnots).name('knot 3').onChange(onChange);
+  developer.add(params, 'devFourthKnot', devKnots).name('knot 4').onChange(onChange);
   developer.add(params, 'devSampleCount', 160, 1400, 1).name('samples').onFinishChange(onChange);
   developer.add(params, 'devCrossSamples', 6, 32, 1).name('ribbon samples').onFinishChange(onChange);
   developer.add(params, 'devRibbonWidth', 0.02, 0.2, 0.005).name('ribbon width').onChange(onChange);
   developer.add(params, 'devLiftAmplitude', 0, 2.4, 0.01).name('4D lift').onChange(onChange);
   developer.add(params, 'devProjectionDistance4D', 2.4, 9, 0.01).name('projection d4').onChange(onChange);
+  developer.add(params, 'devCanonicalRelaxation', 0, 0.85, 0.01).name('settle first').onChange(onChange);
+  developer.add(params, 'devIntermediateRelaxation', 0, 1, 0.01).name('settle between').onChange(onChange);
+  developer.add(params, 'devSimultaneousUncrossings', 1, 5, 1).name('parallel crossings').onChange(onChange);
   developer.add(params, 'devTwistEnabled').name('twisted ribbon').onChange(onChange);
   developer.add(params, 'devTwistTurns', -12, 12, 1).name('twist turns').onChange(onChange);
 
@@ -66,5 +74,13 @@ export function createControlPanel(params: Params, onChange: () => void) {
   surface.add(params, 'fractalStrength', 0, 1.5, 0.01).name('fractal surface');
   surface.add(params, 'fibreDensity', 10, 180, 1).name('fibre density');
   surface.add(params, 'fibreStrength', 0, 1.5, 0.01).name('fibre strength');
+
+  const productionFolders = [topology, confinement, density, local];
+  const developerFolders = [developer];
+  function updateVisibility() {
+    for (const folder of productionFolders) folder.domElement.style.display = params.developerMode ? 'none' : '';
+    for (const folder of developerFolders) folder.domElement.style.display = params.developerMode ? '' : 'none';
+  }
+  updateVisibility();
   return gui;
 }

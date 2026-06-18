@@ -85,16 +85,16 @@ export function KnotScene() {
     const updateDeveloperGeometry = () => {
       const old = developerKnot.geometry;
       developerKnot.geometry = buildDeveloperRibbonMesh({
-        source: params.devSourceKnot,
-        mid: params.devMidKnot,
-        target: params.devTargetKnot,
-        path: params.devTransitionPath,
+        knots: [params.devSourceKnot, params.devMidKnot, params.devTargetKnot, params.devFourthKnot].slice(0, Math.round(params.devTrajectorySize)),
         progress: params.transitionProgress,
         samples: Math.round(params.devSampleCount),
         crossSamples: Math.round(params.devCrossSamples),
         width: params.devRibbonWidth,
         liftAmplitude: params.devLiftAmplitude,
         projectionDistance4D: params.devProjectionDistance4D,
+        canonicalRelaxation: params.devCanonicalRelaxation,
+        intermediateRelaxation: params.devIntermediateRelaxation,
+        simultaneousUncrossings: params.devSimultaneousUncrossings,
         twistTurns: params.devTwistEnabled ? params.devTwistTurns : 0,
       });
       old.dispose();
