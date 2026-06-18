@@ -13,6 +13,8 @@ export function createControlPanel(params: Params, onChange: () => void) {
   gui.add(params, 'edgeFlare', 0, 2.6, 0.01).name('edge flare').onChange(onChange);
   gui.add(params, 'spherizeAmount', 0, 1, 0.01).name('spherize').onChange(onChange);
   gui.add(params, 'tipStrength', 0, 1.5, 0.01).name('ten-tip strength').onChange(onChange);
+  gui.add(params, 'paused').name('pause');
+  gui.add(params, 'globalSpeed', 0, 3, 0.01).name('global speed');
 
   const mode3 = gui.addFolder('3D Knot Mode');
   mode3.add(params, 'knotType', knots).name('knot type').onChange(onChange);

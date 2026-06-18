@@ -8,6 +8,8 @@ export const defaultParams: Params = {
   edgeFlare: 1.32,
   spherizeAmount: 0.72,
   tipStrength: 1.0,
+  paused: false,
+  globalSpeed: 1.0,
   rotationX: 0.03,
   rotationY: 0.08,
   rotationZ: 0.02,

@@ -44,6 +44,8 @@ export interface Params {
   edgeFlare: number;
   spherizeAmount: number;
   tipStrength: number;
+  paused: boolean;
+  globalSpeed: number;
   rotationX: number;
   rotationY: number;
   rotationZ: number;

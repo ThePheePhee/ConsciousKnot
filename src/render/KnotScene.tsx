@@ -126,22 +126,27 @@ export function KnotScene() {
 
     let frame = 0;
     let raf = 0;
+    let lastNow = performance.now();
     const animate = () => {
       raf = requestAnimationFrame(animate);
-      time += 0.016;
+      const now = performance.now();
+      const delta = Math.min(0.05, (now - lastNow) / 1000);
+      lastNow = now;
+      const speed = params.paused ? 0 : params.globalSpeed;
+      time += delta * speed;
       frame++;
       if (params.mode === '4D Transition' && params.autoTransitionSpeed > 0) {
         params.transitionProgress = 0.5 + 0.5 * Math.sin(time * params.autoTransitionSpeed);
-        dirty = true;
+        dirty = dirty || speed > 0;
       }
-      if (params.slitherAmplitude > 0.001 && frame % 2 === 0) dirty = true;
-      if (params.mode === '4D Transition') dirty = true;
+      if (speed > 0 && params.slitherAmplitude > 0.001 && frame % 2 === 0) dirty = true;
+      if (speed > 0 && params.mode === '4D Transition') dirty = true;
       if (dirty) updateGeometry();
 
-      knot.rotation.x += params.rotationX * 0.01;
-      knot.rotation.y += params.rotationY * 0.01;
-      knot.rotation.z += params.rotationZ * 0.01;
-      core.rotation.y -= 0.008;
+      knot.rotation.x += params.rotationX * 0.62 * delta * speed;
+      knot.rotation.y += params.rotationY * 0.62 * delta * speed;
+      knot.rotation.z += params.rotationZ * 0.62 * delta * speed;
+      core.rotation.y -= 0.5 * delta * speed;
       core.scale.setScalar(params.coreSize / 0.42);
       material.uniforms.time.value = time;
       material.uniforms.oilSlickStrength.value = params.oilSlickStrength;
