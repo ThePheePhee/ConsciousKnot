@@ -1,11 +1,14 @@
 import GUI from 'lil-gui';
 import type { Params } from '../math/types';
 import { knotLabels } from '../math/knots';
+import { devKnotLabels } from '../math/devKnots';
 
 export function createControlPanel(params: Params, onChange: () => void) {
   const gui = new GUI({ title: '4D Knot Rearrangement', width: 340 });
   const knots = Object.fromEntries(Object.entries(knotLabels).map(([key, value]) => [value, key]));
+  const devKnots = Object.fromEntries(Object.entries(devKnotLabels).map(([key, value]) => [value, key]));
 
+  gui.add(params, 'developerMode').name('developer mode').onChange(onChange);
   gui.add(params, 'paused').name('pause');
   gui.add(params, 'globalSpeed', 0, 2, 0.01).name('speed');
   gui.add(params, 'transitionProgress', 0, 1, 0.001).name('transition').onChange(onChange);
@@ -18,6 +21,19 @@ export function createControlPanel(params: Params, onChange: () => void) {
   topology.add(params, 'targetKnot', knots).name('target').onChange(onChange);
   topology.add(params, 'phaseLockStrength', 0, 1, 0.01).name('phase lock').onChange(onChange);
   topology.add(params, 'symmetryOrder', 3, 12, 1).name('symmetry').onChange(onChange);
+
+  const developer = gui.addFolder('Developer Mode');
+  developer.add(params, 'devTransitionPath', ['direct spherical', 'three-step spherical']).name('trajectory').onChange(onChange);
+  developer.add(params, 'devSourceKnot', devKnots).name('source').onChange(onChange);
+  developer.add(params, 'devMidKnot', devKnots).name('via').onChange(onChange);
+  developer.add(params, 'devTargetKnot', devKnots).name('target').onChange(onChange);
+  developer.add(params, 'devSampleCount', 160, 1400, 1).name('samples').onFinishChange(onChange);
+  developer.add(params, 'devCrossSamples', 6, 32, 1).name('ribbon samples').onFinishChange(onChange);
+  developer.add(params, 'devRibbonWidth', 0.02, 0.2, 0.005).name('ribbon width').onChange(onChange);
+  developer.add(params, 'devLiftAmplitude', 0, 2.4, 0.01).name('4D lift').onChange(onChange);
+  developer.add(params, 'devProjectionDistance4D', 2.4, 9, 0.01).name('projection d4').onChange(onChange);
+  developer.add(params, 'devTwistEnabled').name('twisted ribbon').onChange(onChange);
+  developer.add(params, 'devTwistTurns', -12, 12, 1).name('twist turns').onChange(onChange);
 
   const confinement = gui.addFolder('Spherical Confinement');
   confinement.add(params, 'confineProjectedSphere').name('3D sphere').onChange(onChange);

@@ -14,6 +14,7 @@ export type KnotKind =
   | 'customTorus';
 export type Mode = '3D Knot' | '4D Transition';
 export type TransitionPath = 'direct spherical' | 'three-step spherical' | 'local crossing';
+export type DevKnotKind = 'unknot' | 'trefoil31' | 'figureEight41' | 'cinquefoil51' | 'twist52' | 'stevedore61' | 'sixTwo62' | 'sixThree63';
 
 export interface RibbonFrame {
   position: Vector3;
@@ -38,6 +39,7 @@ export interface CurveOptions {
 }
 
 export interface Params {
+  developerMode: boolean;
   mode: Mode;
   sampleCount: number;
   crossSamples: number;
@@ -93,6 +95,17 @@ export interface Params {
   rotateYW: number;
   rotateZW: number;
   cameraOrbit: number;
+  devSourceKnot: DevKnotKind;
+  devMidKnot: DevKnotKind;
+  devTargetKnot: DevKnotKind;
+  devTransitionPath: TransitionPath;
+  devSampleCount: number;
+  devCrossSamples: number;
+  devRibbonWidth: number;
+  devLiftAmplitude: number;
+  devProjectionDistance4D: number;
+  devTwistEnabled: boolean;
+  devTwistTurns: number;
 }
 
 export interface Curve4DOptions extends CurveOptions {

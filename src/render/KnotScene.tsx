@@ -16,9 +16,10 @@ import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { buildParametricRibbonGeometry } from '../geometry/buildParametricRibbonGeometry';
+import { buildDeveloperRibbonMesh } from '../geometry/buildDeveloperRibbonMesh';
 import { createControlPanel } from '../controls/ControlPanel';
 import { defaultParams } from '../controls/defaultParams';
-import { createCore, createRibbonMaterial, knotKindId, transitionPathId } from './materials';
+import { createClassicRibbonMaterial, createCore, createRibbonMaterial, knotKindId, transitionPathId } from './materials';
 import { addLights } from './lights';
 import { knotPoint } from '../math/knots';
 import { spherizePoint } from '../math/spherize';
@@ -53,6 +54,9 @@ export function KnotScene() {
     const material = createRibbonMaterial(params);
     const knot = new Mesh(new BufferGeometry(), material);
     scene.add(knot);
+    const developerMaterial = createClassicRibbonMaterial(params);
+    const developerKnot = new Mesh(new BufferGeometry(), developerMaterial);
+    scene.add(developerKnot);
     let phaseCacheKey = '';
     let phaseSourceMid = 0;
     let phaseSourceTarget = 0;
@@ -74,6 +78,25 @@ export function KnotScene() {
       const old = knot.geometry;
       const passes = params.denseProjection ? Math.round(params.densityPasses) : 1;
       knot.geometry = buildParametricRibbonGeometry(Math.round(params.sampleCount), Math.round(params.crossSamples), passes);
+      old.dispose();
+      dirty = false;
+    };
+
+    const updateDeveloperGeometry = () => {
+      const old = developerKnot.geometry;
+      developerKnot.geometry = buildDeveloperRibbonMesh({
+        source: params.devSourceKnot,
+        mid: params.devMidKnot,
+        target: params.devTargetKnot,
+        path: params.devTransitionPath,
+        progress: params.transitionProgress,
+        samples: Math.round(params.devSampleCount),
+        crossSamples: Math.round(params.devCrossSamples),
+        width: params.devRibbonWidth,
+        liftAmplitude: params.devLiftAmplitude,
+        projectionDistance4D: params.devProjectionDistance4D,
+        twistTurns: params.devTwistEnabled ? params.devTwistTurns : 0,
+      });
       old.dispose();
       dirty = false;
     };
@@ -139,6 +162,17 @@ export function KnotScene() {
       uniforms.rotateZW.value = time * params.rotateZW;
     };
 
+    const updateDeveloperUniforms = () => {
+      const uniforms = developerMaterial.uniforms;
+      uniforms.time.value = time;
+      uniforms.oilSlickStrength.value = params.oilSlickStrength;
+      uniforms.fractalStrength.value = params.fractalStrength;
+      uniforms.fibreDensity.value = params.fibreDensity;
+      uniforms.fibreStrength.value = params.fibreStrength;
+      uniforms.lightStrength.value = params.diamondLightStrength;
+      uniforms.corePosition.value = core.position;
+    };
+
     const gui = createControlPanel(params, () => {
       dirty = true;
     });
@@ -167,15 +201,23 @@ export function KnotScene() {
       frame++;
       if (params.autoTransitionSpeed > 0) {
         params.transitionProgress = 0.5 + 0.5 * Math.sin(time * params.autoTransitionSpeed);
+        if (params.developerMode) dirty = true;
       }
-      if (dirty) updateGeometry();
+      knot.visible = !params.developerMode;
+      developerKnot.visible = params.developerMode;
+      if (dirty) {
+        if (params.developerMode) updateDeveloperGeometry();
+        else updateGeometry();
+      }
 
       knot.rotation.x += params.rotationX * 0.62 * delta * speed;
       knot.rotation.y += params.rotationY * 0.62 * delta * speed;
       knot.rotation.z += params.rotationZ * 0.62 * delta * speed;
+      developerKnot.rotation.copy(knot.rotation);
       core.rotation.y -= 0.5 * delta * speed;
       core.scale.setScalar(params.coreSize / 0.42);
       updateUniforms();
+      updateDeveloperUniforms();
       bloom.strength = params.bloomStrength;
       bloom.radius = 0.34;
       bloom.threshold = 0.72;
@@ -201,6 +243,8 @@ export function KnotScene() {
       composer.dispose();
       knot.geometry.dispose();
       material.dispose();
+      developerKnot.geometry.dispose();
+      developerMaterial.dispose();
       mount.removeChild(renderer.domElement);
     };
   }, []);

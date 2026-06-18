@@ -1,5 +1,6 @@
 import { AdditiveBlending, ShaderMaterial, SphereGeometry, Mesh, MeshBasicMaterial, Vector3 } from 'three';
 import vertexShader from '../shaders/ribbon4d.vert.glsl?raw';
+import classicVertexShader from '../shaders/ribbon.vert.glsl?raw';
 import fragmentShader from '../shaders/ribbon.frag.glsl?raw';
 import type { KnotKind, Params, TransitionPath } from '../math/types';
 
@@ -50,6 +51,24 @@ export function createRibbonMaterial(params: Params) {
       rotateYZ: { value: 0 },
       rotateYW: { value: 0 },
       rotateZW: { value: 0 },
+    },
+  });
+}
+
+export function createClassicRibbonMaterial(params: Params) {
+  return new ShaderMaterial({
+    vertexShader: classicVertexShader,
+    fragmentShader,
+    uniforms: {
+      time: { value: 0 },
+      oilSlickStrength: { value: params.oilSlickStrength },
+      fractalStrength: { value: params.fractalStrength },
+      fibreDensity: { value: params.fibreDensity },
+      fibreStrength: { value: params.fibreStrength },
+      lightStrength: { value: params.diamondLightStrength },
+      colorSpeed: { value: 0.18 },
+      colorScale: { value: 12.0 },
+      corePosition: { value: new Vector3() },
     },
   });
 }

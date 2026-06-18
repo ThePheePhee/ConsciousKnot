@@ -1,6 +1,7 @@
 import type { Params } from '../math/types';
 
 export const defaultParams: Params = {
+  developerMode: false,
   mode: '4D Transition',
   sampleCount: 1450,
   crossSamples: 30,
@@ -56,4 +57,15 @@ export const defaultParams: Params = {
   rotateYW: 0.065,
   rotateZW: 0.04,
   cameraOrbit: 0.035,
+  devSourceKnot: 'unknot',
+  devMidKnot: 'trefoil31',
+  devTargetKnot: 'cinquefoil51',
+  devTransitionPath: 'direct spherical',
+  devSampleCount: 720,
+  devCrossSamples: 18,
+  devRibbonWidth: 0.08,
+  devLiftAmplitude: 1.0,
+  devProjectionDistance4D: 5.0,
+  devTwistEnabled: false,
+  devTwistTurns: 0,
 };
