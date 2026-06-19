@@ -122,6 +122,7 @@ export interface Params {
   devSimultaneousUncrossings: number;
   devCrossingMode: DevCrossingMode;
   devHideDuringUncrossing: number;
+  devFourthDimensionDuty: number;
   devTwistEnabled: boolean;
   devTwistTurns: number;
 }

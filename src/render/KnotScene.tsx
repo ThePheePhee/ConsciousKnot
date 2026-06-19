@@ -97,6 +97,7 @@ export function KnotScene() {
         simultaneousUncrossings: params.devSimultaneousUncrossings,
         crossingMode: params.devCrossingMode,
         hideDuringUncrossing: params.devHideDuringUncrossing,
+        fourthDimensionDuty: params.devFourthDimensionDuty,
         twistTurns: params.devTwistEnabled ? params.devTwistTurns : 0,
       });
       old.dispose();

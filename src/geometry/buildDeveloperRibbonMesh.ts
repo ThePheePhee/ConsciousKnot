@@ -17,6 +17,7 @@ interface DeveloperRibbonOptions {
   simultaneousUncrossings: number;
   crossingMode: DevCrossingMode;
   hideDuringUncrossing: number;
+  fourthDimensionDuty: number;
   twistTurns: number;
 }
 
@@ -40,8 +41,8 @@ export function buildDeveloperRibbonMesh(options: DeveloperRibbonOptions) {
     const target = devKnotPoint(targetKnot, t + targetPhase);
     const xyz = source.clone().lerp(target, smootherstep(stage.morph));
     const local = localizedLift(t, segmentIndex, options.simultaneousUncrossings);
-    const lift = options.crossingMode === 'projected intersections' ? 0 : options.liftAmplitude * stage.crossingWindow * local.signedLift;
-    const hidden = options.crossingMode === 'hidden 4D passage' ? options.hideDuringUncrossing * stage.crossingWindow * local.window : 0;
+    const lift = options.crossingMode === 'projected intersections' ? 0 : options.liftAmplitude * stage.fourthDimensionWindow * local.signedLift;
+    const hidden = options.crossingMode === 'hidden 4D passage' ? options.hideDuringUncrossing * stage.fourthDimensionWindow * local.window : 0;
     visibility.push(Math.max(0.025, 1 - hidden));
     points.push(project4Dto3D(new Vector4(xyz.x, xyz.y, xyz.z, lift), options.projectionDistance4D));
   }
@@ -69,12 +70,15 @@ function smootherstep(x: number) {
 function stagedProgress(segmentT: number, segmentIndex: number, options: DeveloperRibbonOptions) {
   const relax = Math.min(0.85, Math.max(0, segmentIndex === 0 ? options.canonicalRelaxation : options.intermediateRelaxation));
   if (segmentT < relax) {
-    return { morph: 0, crossingWindow: 0 };
+    return { morph: 0, fourthDimensionWindow: 0 };
   }
   const crossingT = smootherstep((segmentT - relax) / Math.max(0.0001, 1 - relax));
+  const duty = Math.max(0.015, options.fourthDimensionDuty);
+  const d = crossingT - 0.5;
+  const fourthDimensionWindow = Math.exp(-(d * d) / (2 * duty * duty));
   return {
     morph: crossingT,
-    crossingWindow: Math.pow(Math.sin(Math.PI * crossingT), 1.4),
+    fourthDimensionWindow,
   };
 }
 

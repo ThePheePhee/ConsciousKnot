@@ -74,6 +74,7 @@ export const defaultParams: Params = {
   devSimultaneousUncrossings: 1,
   devCrossingMode: 'hidden 4D passage',
   devHideDuringUncrossing: 0.92,
+  devFourthDimensionDuty: 0.11,
   devTwistEnabled: false,
   devTwistTurns: 0,
 };
