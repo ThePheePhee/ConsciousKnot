@@ -33,6 +33,7 @@ export function KnotScene() {
     const params: Params = { ...defaultParams };
     let dirty = true;
     let time = 0;
+    let transitionClock = params.transitionProgress;
 
     const scene = new Scene();
     scene.background = new Color(0x000000);
@@ -202,9 +203,12 @@ export function KnotScene() {
       const speed = params.paused ? 0 : params.globalSpeed;
       time += delta * speed;
       frame++;
-      if (params.autoTransitionSpeed > 0) {
-        params.transitionProgress = 0.5 + 0.5 * Math.sin(time * params.autoTransitionSpeed);
+      if (params.autoTransitionSpeed > 0 && speed > 0) {
+        transitionClock = (transitionClock + delta * speed * params.autoTransitionSpeed) % 1;
+        params.transitionProgress = 0.5 - 0.5 * Math.cos(transitionClock * Math.PI * 2);
         if (params.developerMode) dirty = true;
+      } else if (params.autoTransitionSpeed === 0) {
+        transitionClock = params.transitionProgress;
       }
       knot.visible = !params.developerMode;
       developerKnot.visible = params.developerMode;

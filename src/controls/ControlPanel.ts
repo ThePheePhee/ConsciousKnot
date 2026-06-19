@@ -14,9 +14,9 @@ export function createControlPanel(params: Params, onChange: () => void) {
 
   gui.add(params, 'developerMode').name('developer mode').onChange(changed);
   gui.add(params, 'paused').name('pause');
-  gui.add(params, 'globalSpeed', 0, 2, 0.01).name('speed');
+  gui.add(params, 'globalSpeed', 0, 8, 0.01).name('speed');
   gui.add(params, 'transitionProgress', 0, 1, 0.001).name('transition').onChange(onChange);
-  gui.add(params, 'autoTransitionSpeed', 0, 0.18, 0.001).name('auto cycle');
+  gui.add(params, 'autoTransitionSpeed', 0, 1, 0.001).name('auto cycle');
   gui.add(params, 'cameraZoom', 0.45, 3.5, 0.01).name('zoom');
 
   const topology = gui.addFolder('Topology');

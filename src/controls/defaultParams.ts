@@ -33,7 +33,7 @@ export const defaultParams: Params = {
   targetKnot: 'torus137',
   transitionPath: 'three-step spherical',
   transitionProgress: 0,
-  autoTransitionSpeed: 0.035,
+  autoTransitionSpeed: 0.08,
   liftAmplitude: 0.64,
   liftFrequency: 7,
   sphereTightness: 0.94,
