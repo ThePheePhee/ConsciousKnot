@@ -17,6 +17,10 @@ interface DeveloperRibbonOptions {
   sphereStrength: number;
   sphereRadius: number;
   sphereSymmetry: number;
+  selfAvoidance: boolean;
+  selfAvoidanceStrength: number;
+  selfAvoidanceIterations: number;
+  tubeClearance: number;
   hideDuringUncrossing: number;
   fourthDimensionDuty: number;
   twistTurns: number;
@@ -40,13 +44,14 @@ export function buildDeveloperRibbonMesh(options: DeveloperRibbonOptions) {
   const changesKnotType = sourceKnot !== targetKnot;
   const targetPhase = alignedPhase(sourceKnot, targetKnot, options.samples);
   const stage = stagedProgress(segmentT, options);
-  const basePoints: Vector3[] = [];
+  const rawPoints: Vector3[] = [];
   for (let i = 0; i < options.samples; i++) {
     const t = (i / options.samples) * Math.PI * 2;
     const source = devKnotPoint(sourceKnot, t);
     const target = devKnotPoint(targetKnot, t + targetPhase);
-    basePoints.push(applySphericalEnvelope(source.clone().lerp(target, stage.morph), t, options));
+    rawPoints.push(source.clone().lerp(target, stage.morph));
   }
+  const basePoints = relaxDeveloperEmbedding(rawPoints, options);
   const crossingField =
     options.crossingMode === 'hidden 4D passage' && changesKnotType
       ? detectCrossingField(basePoints, options, stage.fourthDimensionWindow)
@@ -118,6 +123,169 @@ function applySphericalEnvelope(point: Vector3, t: number, options: DeveloperRib
     : 1;
   const shell = direction.multiplyScalar(radius * shellRipple);
   return point.clone().lerp(shell, strength);
+}
+
+function relaxDeveloperEmbedding(rawPoints: Vector3[], options: DeveloperRibbonOptions) {
+  const n = rawPoints.length;
+  if (n === 0) return rawPoints;
+  let points = rawPoints.map((point, i) => applySphericalEnvelope(point, knotParameter(i, n), options));
+  if (!options.selfAvoidance || options.selfAvoidanceStrength <= 0 || options.selfAvoidanceIterations <= 0) return points;
+
+  const iterations = Math.max(0, Math.round(options.selfAvoidanceIterations));
+  const strength = Math.max(0, Math.min(1, options.selfAvoidanceStrength));
+  const minDistance = Math.max(options.width * Math.max(1.2, options.tubeClearance), options.width + 0.018);
+  const neighborGuard = Math.max(10, Math.floor(n * 0.026));
+  const shellMode = options.sphereMode === 'radial shell' || options.sphereMode === 'symmetric shell';
+  const containmentMode = options.sphereMode === 'contain ball';
+
+  for (let pass = 0; pass < iterations; pass++) {
+    const displacements = Array.from({ length: n }, () => new Vector3());
+    const weights = new Float32Array(n);
+    accumulatePointRepulsion(points, displacements, weights, minDistance, neighborGuard, strength, shellMode);
+    accumulateSegmentRepulsion(points, displacements, weights, minDistance, neighborGuard, strength, shellMode);
+
+    for (let i = 0; i < n; i++) {
+      if (weights[i] <= 0) continue;
+      const displacement = displacements[i].multiplyScalar(1 / weights[i]);
+      points[i].add(displacement.multiplyScalar(0.72));
+    }
+
+    points = smoothWithoutShrinking(points, 0.08 * strength, shellMode);
+    points = points.map((point, i) => stabilizeEnvelope(point, knotParameter(i, n), options, shellMode, containmentMode));
+  }
+
+  return points;
+}
+
+function accumulatePointRepulsion(
+  points: Vector3[],
+  displacements: Vector3[],
+  weights: Float32Array,
+  minDistance: number,
+  neighborGuard: number,
+  strength: number,
+  shellMode: boolean,
+) {
+  const n = points.length;
+  const minDistanceSq = minDistance * minDistance;
+  for (let i = 0; i < n; i++) {
+    for (let j = i + neighborGuard; j < n; j++) {
+      const wrapped = Math.min(j - i, n - (j - i));
+      if (wrapped < neighborGuard) continue;
+      const delta = points[i].clone().sub(points[j]);
+      const distanceSq = delta.lengthSq();
+      if (distanceSq >= minDistanceSq) continue;
+      const distance = Math.sqrt(Math.max(distanceSq, 0.0000001));
+      const amount = ((minDistance - distance) / minDistance) * minDistance * strength;
+      const direction = stableRepulsionDirection(delta, i, j, shellMode ? points[i] : null);
+      const pushI = tangentConstrained(direction, points[i], shellMode).multiplyScalar(amount);
+      const pushJ = tangentConstrained(direction.clone().multiplyScalar(-1), points[j], shellMode).multiplyScalar(amount);
+      displacements[i].add(pushI);
+      displacements[j].add(pushJ);
+      weights[i] += 1;
+      weights[j] += 1;
+    }
+  }
+}
+
+function accumulateSegmentRepulsion(
+  points: Vector3[],
+  displacements: Vector3[],
+  weights: Float32Array,
+  minDistance: number,
+  neighborGuard: number,
+  strength: number,
+  shellMode: boolean,
+) {
+  const n = points.length;
+  const minDistanceSq = minDistance * minDistance;
+  for (let i = 0; i < n; i++) {
+    const iNext = (i + 1) % n;
+    for (let j = i + neighborGuard; j < n; j++) {
+      const jNext = (j + 1) % n;
+      if (cyclicIndexDistance(i, j, n) < neighborGuard || cyclicIndexDistance(iNext, j, n) < neighborGuard || cyclicIndexDistance(i, jNext, n) < neighborGuard) continue;
+      const closest = closestSegmentParameters(points[i], points[iNext], points[j], points[jNext]);
+      if (closest.distanceSq >= minDistanceSq) continue;
+      const distance = Math.sqrt(Math.max(closest.distanceSq, 0.0000001));
+      const amount = ((minDistance - distance) / minDistance) * minDistance * strength * 0.85;
+      const direction = stableRepulsionDirection(closest.delta, i, j, shellMode ? closest.aPoint : null);
+      const pushA = tangentConstrained(direction, closest.aPoint, shellMode).multiplyScalar(amount);
+      const pushB = tangentConstrained(direction.clone().multiplyScalar(-1), closest.bPoint, shellMode).multiplyScalar(amount);
+      addWeightedDisplacement(displacements, weights, i, iNext, 1 - closest.s, closest.s, pushA);
+      addWeightedDisplacement(displacements, weights, j, jNext, 1 - closest.t, closest.t, pushB);
+    }
+  }
+}
+
+function addWeightedDisplacement(displacements: Vector3[], weights: Float32Array, a: number, b: number, wa: number, wb: number, push: Vector3) {
+  displacements[a].addScaledVector(push, wa);
+  displacements[b].addScaledVector(push, wb);
+  weights[a] += wa;
+  weights[b] += wb;
+}
+
+function closestSegmentParameters(a0: Vector3, a1: Vector3, b0: Vector3, b1: Vector3) {
+  const u = a1.clone().sub(a0);
+  const v = b1.clone().sub(b0);
+  const w = a0.clone().sub(b0);
+  const aa = u.dot(u);
+  const bb = v.dot(v);
+  const ab = u.dot(v);
+  const aw = u.dot(w);
+  const bw = v.dot(w);
+  const denom = aa * bb - ab * ab;
+  let s = denom > 0.0000001 ? (ab * bw - bb * aw) / denom : 0;
+  let t = denom > 0.0000001 ? (aa * bw - ab * aw) / denom : 0;
+  s = Math.max(0, Math.min(1, s));
+  t = Math.max(0, Math.min(1, t));
+  const aPoint = a0.clone().addScaledVector(u, s);
+  const bPoint = b0.clone().addScaledVector(v, t);
+  const delta = aPoint.clone().sub(bPoint);
+  return { s, t, aPoint, bPoint, delta, distanceSq: delta.lengthSq() };
+}
+
+function stableRepulsionDirection(delta: Vector3, i: number, j: number, fallbackPoint: Vector3 | null) {
+  if (delta.lengthSq() > 0.0000001) return delta.normalize();
+  const seed = Math.sin((i + 1) * 12.9898 + (j + 1) * 78.233) * 43758.5453;
+  const angle = (seed - Math.floor(seed)) * Math.PI * 2;
+  const fallback = new Vector3(Math.cos(angle), Math.sin(angle), Math.sin(angle * 1.7));
+  if (!fallbackPoint || fallbackPoint.lengthSq() < 0.0001) return fallback.normalize();
+  return tangentConstrained(fallback, fallbackPoint, true).normalize();
+}
+
+function tangentConstrained(vector: Vector3, point: Vector3, shellMode: boolean) {
+  if (!shellMode || point.lengthSq() < 0.0001) return vector.normalize();
+  const radial = point.clone().normalize();
+  const tangent = vector.clone().sub(radial.multiplyScalar(vector.dot(radial)));
+  return tangent.lengthSq() > 0.000001 ? tangent.normalize() : projectedReferenceNormal(radial);
+}
+
+function smoothWithoutShrinking(points: Vector3[], amount: number, shellMode: boolean) {
+  if (amount <= 0) return points;
+  const n = points.length;
+  return points.map((point, i) => {
+    const prev = points[(i - 1 + n) % n];
+    const next = points[(i + 1) % n];
+    const average = prev.clone().add(next).multiplyScalar(0.5);
+    const correction = average.sub(point);
+    if (shellMode && point.lengthSq() > 0.0001) {
+      const radial = point.clone().normalize();
+      correction.sub(radial.multiplyScalar(correction.dot(radial)));
+    }
+    return point.clone().addScaledVector(correction, amount);
+  });
+}
+
+function stabilizeEnvelope(point: Vector3, t: number, options: DeveloperRibbonOptions, shellMode: boolean, containmentMode: boolean) {
+  if (options.sphereMode === 'off' || options.sphereStrength <= 0) return point;
+  if (containmentMode) return applySphericalEnvelope(point, t, options);
+  if (!shellMode || point.lengthSq() < 0.0001) return point;
+  const target = applySphericalEnvelope(point, t, { ...options, sphereStrength: 1 });
+  return point.clone().lerp(target, Math.min(0.35, options.sphereStrength * 0.42));
+}
+
+function knotParameter(i: number, samples: number) {
+  return (i / samples) * Math.PI * 2;
 }
 
 function hiddenPassageVisibility(options: DeveloperRibbonOptions, changesKnotType: boolean, passage: number) {

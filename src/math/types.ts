@@ -117,6 +117,10 @@ export interface Params {
   devSphereStrength: number;
   devSphereRadius: number;
   devSphereSymmetry: number;
+  devSelfAvoidance: boolean;
+  devSelfAvoidanceStrength: number;
+  devSelfAvoidanceIterations: number;
+  devTubeClearance: number;
   devHideDuringUncrossing: number;
   devFourthDimensionDuty: number;
   devTwistEnabled: boolean;
