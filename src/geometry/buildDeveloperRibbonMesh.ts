@@ -29,14 +29,12 @@ const phaseCache = new Map<string, number>();
 
 export function buildDeveloperRibbonMesh(options: DeveloperRibbonOptions) {
   const knots = options.knots.length > 0 ? options.knots : ['unknot' as DevKnotKind];
-  const cyclic = knots.length > 1;
-  const segmentCount = cyclic ? knots.length : 1;
-  const wrappedProgress = ((options.progress % 1) + 1) % 1;
-  const segmentPosition = wrappedProgress * segmentCount;
+  const segmentCount = Math.max(1, knots.length - 1);
+  const segmentPosition = Math.min(0.999999, Math.max(0, options.progress)) * segmentCount;
   const segmentIndex = Math.min(segmentCount - 1, Math.floor(segmentPosition));
-  const segmentT = cyclic ? segmentPosition - segmentIndex : 0;
-  const sourceKnot = knots[segmentIndex % knots.length] ?? knots[0];
-  const targetKnot = knots[(segmentIndex + 1) % knots.length] ?? sourceKnot;
+  const segmentT = segmentCount === 1 && knots.length === 1 ? 0 : segmentPosition - segmentIndex;
+  const sourceKnot = knots[segmentIndex] ?? knots[0];
+  const targetKnot = knots[Math.min(segmentIndex + 1, knots.length - 1)] ?? sourceKnot;
   const changesKnotType = sourceKnot !== targetKnot;
   const targetPhase = alignedPhase(sourceKnot, targetKnot, options.samples);
   const stage = stagedProgress(segmentT, segmentIndex, options);
@@ -49,7 +47,7 @@ export function buildDeveloperRibbonMesh(options: DeveloperRibbonOptions) {
   }
   const crossingField =
     options.crossingMode === 'hidden 4D passage' && changesKnotType
-      ? detectCrossingField(basePoints, options)
+      ? detectCrossingField(basePoints, options, stage.fourthDimensionWindow)
       : evenlySpacedCrossingField(options.samples, segmentIndex, options.simultaneousUncrossings, stage.fourthDimensionWindow);
   const points: Vector3[] = [];
   const visibility: number[] = [];
@@ -60,7 +58,7 @@ export function buildDeveloperRibbonMesh(options: DeveloperRibbonOptions) {
     visibility.push(hiddenPassageVisibility(options, changesKnotType, field.window));
     points.push(project4Dto3D(new Vector4(xyz.x, xyz.y, xyz.z, lift), options.projectionDistance4D));
   }
-  const frames = buildUntwistedDeveloperFrames(basePoints, points);
+  const frames = buildRadialDeveloperFrames(basePoints, points);
   if (Math.abs(options.twistTurns) > 0.0001) {
     for (let i = 0; i < frames.length; i++) {
       const angle = options.twistTurns * Math.PI * 2 * (i / frames.length);
@@ -86,7 +84,7 @@ function smootherstep(x: number) {
 }
 
 function stagedProgress(segmentT: number, segmentIndex: number, options: DeveloperRibbonOptions) {
-  const relaxation = Math.max(0, Math.min(0.92, segmentIndex === 0 ? options.canonicalRelaxation : options.intermediateRelaxation));
+  const relaxation = Math.max(0, Math.min(0.5, segmentIndex === 0 ? options.canonicalRelaxation : options.intermediateRelaxation));
   const linear = Math.max(0, Math.min(1, segmentT));
   const eased = smootherstep(linear);
   const morph = linear + (eased - linear) * relaxation;
@@ -136,9 +134,10 @@ function localizedLift(t: number, segmentIndex: number, simultaneousUncrossings:
   };
 }
 
-function detectCrossingField(points: Vector3[], options: DeveloperRibbonOptions) {
+function detectCrossingField(points: Vector3[], options: DeveloperRibbonOptions, temporalWindow: number) {
   const n = points.length;
   const field = Array.from({ length: n }, () => ({ signedLift: 0, window: 0 }));
+  if (temporalWindow < 0.01) return field;
   const maxCrossings = Math.max(1, Math.round(options.simultaneousUncrossings));
   const minSeparation = Math.max(24, Math.floor(n * 0.045));
   const innerRadius = Math.max(options.width * 1.15, 0.035);
@@ -174,7 +173,7 @@ function detectCrossingField(points: Vector3[], options: DeveloperRibbonOptions)
 
   for (let crossingIndex = 0; crossingIndex < accepted.length; crossingIndex++) {
     const candidate = accepted[crossingIndex];
-    const collisionStrength = 1 - smoothRange(innerRadius, outerRadius, candidate.distance);
+    const collisionStrength = temporalWindow * (1 - smoothRange(innerRadius, outerRadius, candidate.distance));
     if (collisionStrength <= 0) continue;
     paintCrossingWindow(field, candidate.a, 1, collisionStrength, n);
     paintCrossingWindow(field, candidate.b, -1, collisionStrength, n);
@@ -222,17 +221,16 @@ function alignedPhase(source: DevKnotKind, target: DevKnotKind, samples: number)
   return bestPhase;
 }
 
-function buildUntwistedDeveloperFrames(framePoints: Vector3[], displayPoints: Vector3[]) {
+function buildRadialDeveloperFrames(framePoints: Vector3[], displayPoints: Vector3[]) {
   const n = framePoints.length;
   const frames: RibbonFrame[] = [];
-  let previousNormal: Vector3 | null = null;
   for (let i = 0; i < n; i++) {
     const tangent = framePoints[(i + 1) % n].clone().sub(framePoints[(i - 1 + n) % n]).normalize();
-    let normal = projectedReferenceNormal(tangent, previousNormal);
-    if (previousNormal && normal.dot(previousNormal) < 0) normal.multiplyScalar(-1);
+    const radial = framePoints[i].lengthSq() > 0.0001 ? framePoints[i].clone().normalize() : new Vector3(0, 0, 1);
+    let normal = radial.sub(tangent.clone().multiplyScalar(radial.dot(tangent)));
+    if (normal.lengthSq() < 0.0001) normal = projectedReferenceNormal(tangent);
     normal.sub(tangent.clone().multiplyScalar(normal.dot(tangent))).normalize();
     const binormal = tangent.clone().cross(normal).normalize();
-    previousNormal = normal.clone();
     frames.push({
       position: displayPoints[i],
       tangent,
@@ -245,11 +243,7 @@ function buildUntwistedDeveloperFrames(framePoints: Vector3[], displayPoints: Ve
   return frames;
 }
 
-function projectedReferenceNormal(tangent: Vector3, previousNormal: Vector3 | null) {
-  if (previousNormal) {
-    const transported = previousNormal.clone().sub(tangent.clone().multiplyScalar(previousNormal.dot(tangent)));
-    if (transported.lengthSq() > 0.0001) return transported.normalize();
-  }
+function projectedReferenceNormal(tangent: Vector3) {
   const references = [new Vector3(0, 0, 1), new Vector3(0, 1, 0), new Vector3(1, 0, 0)];
   let best = new Vector3(1, 0, 0);
   let bestLength = -1;
@@ -261,7 +255,6 @@ function projectedReferenceNormal(tangent: Vector3, previousNormal: Vector3 | nu
       bestLength = length;
     }
   }
-  if (bestLength < 0.0001 && previousNormal) return previousNormal.clone();
   return best.normalize();
 }
 
