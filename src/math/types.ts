@@ -16,6 +16,8 @@ export type Mode = '3D Knot' | '4D Transition';
 export type TransitionPath = 'direct spherical' | 'three-step spherical' | 'local crossing';
 export type DevCrossingMode = 'projected intersections' | 'hidden 4D passage';
 export type DevSphereMode = 'off' | 'contain ball' | 'radial shell' | 'symmetric shell';
+export type DevCoreMode = 'spherical shell weave' | 'legacy knot curve';
+export type DevShellPattern = 'unknot shell' | 'trefoil shell' | 'figure-eight shell' | 'pentafoil shell' | 'sixfold shell weave';
 export type DevKnotKind = string;
 
 export interface RibbonFrame {
@@ -103,6 +105,11 @@ export interface Params {
   devMidKnot: DevKnotKind;
   devTargetKnot: DevKnotKind;
   devFourthKnot: DevKnotKind;
+  devCoreMode: DevCoreMode;
+  devShellSource: DevShellPattern;
+  devShellTarget: DevShellPattern;
+  devShellRadius: number;
+  devShellThickness: number;
   devTrajectorySize: number;
   devTransitionPath: TransitionPath;
   devSampleCount: number;

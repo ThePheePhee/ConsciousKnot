@@ -18,6 +18,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { buildParametricRibbonGeometry } from '../geometry/buildParametricRibbonGeometry';
 import { buildDeveloperRibbonMesh } from '../geometry/buildDeveloperRibbonMesh';
+import { buildSphericalWeaveRibbonMesh } from '../geometry/buildSphericalWeaveRibbonMesh';
 import { createControlPanel } from '../controls/ControlPanel';
 import { defaultParams } from '../controls/defaultParams';
 import { createClassicRibbonMaterial, createCore, createRibbonMaterial, knotKindId, transitionPathId } from './materials';
@@ -88,29 +89,45 @@ export function KnotScene() {
 
     const updateDeveloperGeometry = () => {
       const old = developerKnot.geometry;
-      developerKnot.geometry = buildDeveloperRibbonMesh({
-        knots: [params.devSourceKnot, params.devMidKnot, params.devTargetKnot, params.devFourthKnot].slice(0, Math.round(params.devTrajectorySize)),
-        progress: params.transitionProgress,
-        samples: Math.round(params.devSampleCount),
-        crossSamples: Math.round(params.devCrossSamples),
-        width: params.devRibbonWidth,
-        liftAmplitude: params.devLiftAmplitude,
-        projectionDistance4D: params.devProjectionDistance4D,
-        simultaneousUncrossings: params.devSimultaneousUncrossings,
-        crossingMode: params.devCrossingMode,
-        showWPassage: params.devShowWPassage,
-        sphereMode: params.devSphereMode,
-        sphereStrength: params.devSphereStrength,
-        sphereRadius: params.devSphereRadius,
-        sphereSymmetry: params.devSphereSymmetry,
-        selfAvoidance: params.devSelfAvoidance,
-        selfAvoidanceStrength: params.devSelfAvoidanceStrength,
-        selfAvoidanceIterations: params.devSelfAvoidanceIterations,
-        tubeClearance: params.devTubeClearance,
-        hideDuringUncrossing: params.devHideDuringUncrossing,
-        fourthDimensionDuty: params.devFourthDimensionDuty,
-        twistTurns: params.devTwistEnabled ? params.devTwistTurns : 0,
-      });
+      developerKnot.geometry = params.devCoreMode === 'spherical shell weave'
+        ? buildSphericalWeaveRibbonMesh({
+            sourcePattern: params.devShellSource,
+            targetPattern: params.devShellTarget,
+            progress: params.transitionProgress,
+            samples: Math.round(params.devSampleCount),
+            crossSamples: Math.round(params.devCrossSamples),
+            width: params.devRibbonWidth,
+            shellRadius: params.devShellRadius,
+            shellThickness: params.devShellThickness,
+            liftAmplitude: params.devLiftAmplitude,
+            showWPassage: params.devShowWPassage,
+            selfAvoidanceStrength: params.devSelfAvoidanceStrength,
+            selfAvoidanceIterations: params.devSelfAvoidanceIterations,
+            tubeClearance: params.devTubeClearance,
+          })
+        : buildDeveloperRibbonMesh({
+            knots: [params.devSourceKnot, params.devMidKnot, params.devTargetKnot, params.devFourthKnot].slice(0, Math.round(params.devTrajectorySize)),
+            progress: params.transitionProgress,
+            samples: Math.round(params.devSampleCount),
+            crossSamples: Math.round(params.devCrossSamples),
+            width: params.devRibbonWidth,
+            liftAmplitude: params.devLiftAmplitude,
+            projectionDistance4D: params.devProjectionDistance4D,
+            simultaneousUncrossings: params.devSimultaneousUncrossings,
+            crossingMode: params.devCrossingMode,
+            showWPassage: params.devShowWPassage,
+            sphereMode: params.devSphereMode,
+            sphereStrength: params.devSphereStrength,
+            sphereRadius: params.devSphereRadius,
+            sphereSymmetry: params.devSphereSymmetry,
+            selfAvoidance: params.devSelfAvoidance,
+            selfAvoidanceStrength: params.devSelfAvoidanceStrength,
+            selfAvoidanceIterations: params.devSelfAvoidanceIterations,
+            tubeClearance: params.devTubeClearance,
+            hideDuringUncrossing: params.devHideDuringUncrossing,
+            fourthDimensionDuty: params.devFourthDimensionDuty,
+            twistTurns: params.devTwistEnabled ? params.devTwistTurns : 0,
+          });
       old.dispose();
       dirty = false;
     };
