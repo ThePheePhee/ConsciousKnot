@@ -145,45 +145,36 @@ function detectCrossingField(points: Vector3[], options: DeveloperRibbonOptions,
   if (temporalWindow < 0.01) return field;
   const maxCrossings = Math.max(1, Math.round(options.simultaneousUncrossings));
   const minSeparation = Math.max(24, Math.floor(n * 0.045));
-  const innerRadius = Math.max(options.width * 1.75, 0.045);
-  const outerRadius = Math.max(options.width * 7.5, 0.24);
-  const candidates: { a: number; b: number; distance: number }[] = [];
+  const candidates: { a: number; b: number; depthGap: number }[] = [];
 
   for (let a = 0; a < n; a++) {
-    let bestB = -1;
-    let bestDistanceSq = outerRadius * outerRadius;
+    const aNext = (a + 1) % n;
     for (let b = a + minSeparation; b < n; b++) {
+      const bNext = (b + 1) % n;
       const wrapped = Math.min(b - a, n - (b - a));
       if (wrapped < minSeparation) continue;
-      const dx = points[a].x - points[b].x;
-      const dy = points[a].y - points[b].y;
-      const dz = Math.abs(points[a].z - points[b].z);
-      const screenDistanceSq = dx * dx + dy * dy;
-      const depthPenalty = 0.018 * dz * dz;
-      const distanceSq = screenDistanceSq + depthPenalty;
-      if (distanceSq < bestDistanceSq) {
-        bestDistanceSq = distanceSq;
-        bestB = b;
-      }
-    }
-    if (bestB >= 0) {
-      candidates.push({ a, b: bestB, distance: Math.sqrt(bestDistanceSq) });
+      if (cyclicIndexDistance(aNext, b, n) < minSeparation || cyclicIndexDistance(a, bNext, n) < minSeparation) continue;
+      const hit = projectedSegmentIntersection(points[a], points[aNext], points[b], points[bNext]);
+      if (!hit) continue;
+      const az = points[a].z + (points[aNext].z - points[a].z) * hit.ua;
+      const bz = points[b].z + (points[bNext].z - points[b].z) * hit.ub;
+      candidates.push({ a: a + hit.ua, b: b + hit.ub, depthGap: Math.abs(az - bz) });
     }
   }
 
-  candidates.sort((left, right) => left.distance - right.distance);
+  candidates.sort((left, right) => left.depthGap - right.depthGap);
   const accepted: typeof candidates = [];
   for (const candidate of candidates) {
     if (accepted.length >= maxCrossings) break;
     const overlaps = accepted.some((existing) => {
-      return cyclicIndexDistance(candidate.a, existing.a, n) < minSeparation || cyclicIndexDistance(candidate.a, existing.b, n) < minSeparation || cyclicIndexDistance(candidate.b, existing.a, n) < minSeparation || cyclicIndexDistance(candidate.b, existing.b, n) < minSeparation;
+      return cyclicFloatDistance(candidate.a, existing.a, n) < minSeparation || cyclicFloatDistance(candidate.a, existing.b, n) < minSeparation || cyclicFloatDistance(candidate.b, existing.a, n) < minSeparation || cyclicFloatDistance(candidate.b, existing.b, n) < minSeparation;
     });
     if (!overlaps) accepted.push(candidate);
   }
 
   for (let crossingIndex = 0; crossingIndex < accepted.length; crossingIndex++) {
     const candidate = accepted[crossingIndex];
-    const collisionStrength = temporalWindow * (1 - smoothRange(innerRadius, outerRadius, candidate.distance));
+    const collisionStrength = temporalWindow;
     if (collisionStrength <= 0) continue;
     paintCrossingWindow(field, candidate.a, 1, collisionStrength, n);
     paintCrossingWindow(field, candidate.b, -1, collisionStrength, n);
@@ -191,10 +182,25 @@ function detectCrossingField(points: Vector3[], options: DeveloperRibbonOptions,
   return field;
 }
 
+function projectedSegmentIntersection(a0: Vector3, a1: Vector3, b0: Vector3, b1: Vector3) {
+  const rx = a1.x - a0.x;
+  const ry = a1.y - a0.y;
+  const sx = b1.x - b0.x;
+  const sy = b1.y - b0.y;
+  const denom = rx * sy - ry * sx;
+  if (Math.abs(denom) < 0.000001) return null;
+  const qpx = b0.x - a0.x;
+  const qpy = b0.y - a0.y;
+  const ua = (qpx * sy - qpy * sx) / denom;
+  const ub = (qpx * ry - qpy * rx) / denom;
+  if (ua <= 0.02 || ua >= 0.98 || ub <= 0.02 || ub >= 0.98) return null;
+  return { ua, ub };
+}
+
 function paintCrossingWindow(field: CrossingField[], center: number, sign: number, strength: number, samples: number) {
   const radius = Math.max(12, Math.floor(samples * 0.04));
   for (let offset = -radius; offset <= radius; offset++) {
-    const index = (center + offset + samples) % samples;
+    const index = (Math.round(center) + offset + samples) % samples;
     const u = Math.abs(offset) / radius;
     const window = strength * smootherstep(1 - u);
     field[index].window = Math.max(field[index].window, window);
@@ -203,6 +209,11 @@ function paintCrossingWindow(field: CrossingField[], center: number, sign: numbe
 }
 
 function cyclicIndexDistance(a: number, b: number, samples: number) {
+  const d = Math.abs(a - b);
+  return Math.min(d, samples - d);
+}
+
+function cyclicFloatDistance(a: number, b: number, samples: number) {
   const d = Math.abs(a - b);
   return Math.min(d, samples - d);
 }

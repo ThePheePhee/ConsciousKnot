@@ -193,6 +193,35 @@ export function KnotScene() {
     };
     window.addEventListener('resize', onResize);
 
+    let dragging = false;
+    let lastPointerX = 0;
+    let lastPointerY = 0;
+    const onPointerDown = (event: PointerEvent) => {
+      dragging = true;
+      lastPointerX = event.clientX;
+      lastPointerY = event.clientY;
+      renderer.domElement.setPointerCapture(event.pointerId);
+    };
+    const onPointerMove = (event: PointerEvent) => {
+      if (!dragging) return;
+      const dx = event.clientX - lastPointerX;
+      const dy = event.clientY - lastPointerY;
+      lastPointerX = event.clientX;
+      lastPointerY = event.clientY;
+      knot.rotation.y += dx * 0.006;
+      knot.rotation.x += dy * 0.006;
+      developerKnot.rotation.copy(knot.rotation);
+    };
+    const onPointerUp = (event: PointerEvent) => {
+      dragging = false;
+      if (renderer.domElement.hasPointerCapture(event.pointerId)) renderer.domElement.releasePointerCapture(event.pointerId);
+    };
+    renderer.domElement.style.cursor = 'grab';
+    renderer.domElement.addEventListener('pointerdown', onPointerDown);
+    renderer.domElement.addEventListener('pointermove', onPointerMove);
+    renderer.domElement.addEventListener('pointerup', onPointerUp);
+    renderer.domElement.addEventListener('pointercancel', onPointerUp);
+
     let frame = 0;
     let raf = 0;
     let lastNow = performance.now();
@@ -204,7 +233,9 @@ export function KnotScene() {
       const speed = params.paused ? 0 : params.globalSpeed;
       time += delta * speed;
       frame++;
-      if (params.autoTransitionSpeed > 0 && speed > 0) {
+      if (params.paused) {
+        transitionClock = params.developerMode ? inversePingPong(params.transitionProgress) : params.transitionProgress;
+      } else if (params.autoTransitionSpeed > 0 && speed > 0) {
         transitionClock = (transitionClock + delta * speed * params.autoTransitionSpeed) % 1;
         params.transitionProgress = params.developerMode ? pingPong(transitionClock) : 0.5 - 0.5 * Math.cos(transitionClock * Math.PI * 2);
         if (params.developerMode) dirty = true;
@@ -247,6 +278,10 @@ export function KnotScene() {
     return () => {
       cancelAnimationFrame(raf);
       window.removeEventListener('resize', onResize);
+      renderer.domElement.removeEventListener('pointerdown', onPointerDown);
+      renderer.domElement.removeEventListener('pointermove', onPointerMove);
+      renderer.domElement.removeEventListener('pointerup', onPointerUp);
+      renderer.domElement.removeEventListener('pointercancel', onPointerUp);
       gui.destroy();
       renderer.dispose();
       composer.dispose();
@@ -272,6 +307,10 @@ export function KnotScene() {
 function pingPong(phase: number) {
   const t = phase < 0.5 ? phase * 2 : 2 - phase * 2;
   return Math.max(0, Math.min(1, t));
+}
+
+function inversePingPong(progress: number) {
+  return Math.max(0, Math.min(0.5, progress * 0.5));
 }
 
 function alignedPhase(sourceKind: KnotKind, targetKind: KnotKind, params: Params) {

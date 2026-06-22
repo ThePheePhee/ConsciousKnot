@@ -33,6 +33,7 @@ export function createControlPanel(params: Params, onChange: () => void) {
   withHelp(developer.add(params, 'devMidKnot', devKnots).name('knot 2').onChange(onChange), 'The second knot in the trajectory. With trajectory knots set to 2, this is the target knot.');
   withHelp(developer.add(params, 'devTargetKnot', devKnots).name('knot 3').onChange(onChange), 'The third knot in a three- or four-step trajectory.');
   withHelp(developer.add(params, 'devFourthKnot', devKnots).name('knot 4').onChange(onChange), 'The fourth knot in the longest developer trajectory.');
+  withHelp(developer.add(params, 'transitionProgress', 0, 1, 0.0005).name('paused scrub').onChange(onChange), 'When paused, use this to scrub backward and forward through the transition for frame-by-frame inspection.');
   withHelp(developer.add(params, 'devSampleCount', 160, 1400, 1).name('samples').onFinishChange(onChange), 'Number of samples along the closed knot centerline. Higher values make smoother curves and more accurate crossings, but cost more CPU/GPU upload time in developer mode.');
   withHelp(developer.add(params, 'devCrossSamples', 6, 32, 1).name('ribbon samples').onFinishChange(onChange), 'Number of samples across the ribbon width. Higher values make the ribbon surface smoother across its width.');
   withHelp(developer.add(params, 'devRibbonWidth', 0.02, 0.2, 0.005).name('ribbon width').onChange(onChange), 'Physical width of the inspectable ribbon around the knot centerline.');
