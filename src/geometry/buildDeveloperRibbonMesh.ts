@@ -10,8 +10,6 @@ interface DeveloperRibbonOptions {
   crossSamples: number;
   liftAmplitude: number;
   projectionDistance4D: number;
-  canonicalRelaxation: number;
-  intermediateRelaxation: number;
   simultaneousUncrossings: number;
   crossingMode: DevCrossingMode;
   showWPassage: boolean;
@@ -37,13 +35,13 @@ export function buildDeveloperRibbonMesh(options: DeveloperRibbonOptions) {
   const targetKnot = knots[Math.min(segmentIndex + 1, knots.length - 1)] ?? sourceKnot;
   const changesKnotType = sourceKnot !== targetKnot;
   const targetPhase = alignedPhase(sourceKnot, targetKnot, options.samples);
-  const stage = stagedProgress(segmentT, segmentIndex, options);
+  const stage = stagedProgress(segmentT, options);
   const basePoints: Vector3[] = [];
   for (let i = 0; i < options.samples; i++) {
     const t = (i / options.samples) * Math.PI * 2;
     const source = devKnotPoint(sourceKnot, t);
     const target = devKnotPoint(targetKnot, t + targetPhase);
-    basePoints.push(source.clone().lerp(target, smootherstep(stage.morph)));
+    basePoints.push(source.clone().lerp(target, stage.morph));
   }
   const crossingField =
     options.crossingMode === 'hidden 4D passage' && changesKnotType
@@ -88,16 +86,13 @@ function smootherstep(x: number) {
   return t * t * t * (t * (t * 6 - 15) + 10);
 }
 
-function stagedProgress(segmentT: number, segmentIndex: number, options: DeveloperRibbonOptions) {
-  const relaxation = Math.max(0, Math.min(0.5, segmentIndex === 0 ? options.canonicalRelaxation : options.intermediateRelaxation));
+function stagedProgress(segmentT: number, options: DeveloperRibbonOptions) {
   const linear = Math.max(0, Math.min(1, segmentT));
-  const eased = smootherstep(linear);
-  const morph = linear + (eased - linear) * relaxation;
   const duty = Math.max(0.015, options.fourthDimensionDuty);
-  const d = morph - 0.5;
+  const d = linear - 0.5;
   const fourthDimensionWindow = Math.exp(-(d * d) / (2 * duty * duty));
   return {
-    morph,
+    morph: linear,
     fourthDimensionWindow,
   };
 }

@@ -17,6 +17,7 @@ export function createControlPanel(params: Params, onChange: () => void) {
   gui.add(params, 'globalSpeed', 0, 2, 0.001).name('speed');
   gui.add(params, 'transitionProgress', 0, 1, 0.001).name('transition').onChange(onChange);
   gui.add(params, 'autoTransitionSpeed', 0, 1, 0.001).name('auto cycle');
+  gui.add(params, 'autoRotate').name('auto rotate');
   gui.add(params, 'cameraZoom', 0.45, 3.5, 0.01).name('zoom');
 
   const topology = gui.addFolder('Topology');
@@ -38,8 +39,6 @@ export function createControlPanel(params: Params, onChange: () => void) {
   withHelp(developer.add(params, 'devCrossSamples', 6, 32, 1).name('ribbon samples').onFinishChange(onChange), 'Number of samples across the ribbon width. Higher values make the ribbon surface smoother across its width.');
   withHelp(developer.add(params, 'devRibbonWidth', 0.02, 0.2, 0.005).name('ribbon width').onChange(onChange), 'Physical width of the inspectable ribbon around the knot centerline.');
   withHelp(developer.add(params, 'devLiftAmplitude', 0, 2.4, 0.01).name('4D lift').onChange(onChange), 'Maximum W-axis displacement during a crossing move. In hidden 4D passage mode, this is the actual fourth-dimensional excursion that separates strands without a 3D self-intersection.');
-  withHelp(developer.add(params, 'devCanonicalRelaxation', 0, 0.85, 0.01).name('settle first').onChange(onChange), 'How strongly the first segment eases toward its canonical low-energy-looking embedding before and after the crossing phase. This shapes the motion continuously; it no longer creates a hard pause.');
-  withHelp(developer.add(params, 'devIntermediateRelaxation', 0, 1, 0.01).name('settle between').onChange(onChange), 'How strongly intermediate trajectory segments smooth toward their canonical embeddings between knot changes. Higher values linger visually near recognizable knots without stopping the motion.');
   withHelp(developer.add(params, 'devSimultaneousUncrossings', 1, 5, 1).name('parallel crossings').onChange(onChange), 'How many localized crossing windows are allowed at the same time along the ribbon. Lower values isolate one move; higher values show multiple W-axis passages in parallel.');
   withHelp(developer.add(params, 'devCrossingMode', ['projected intersections', 'hidden 4D passage']).name('crossing view').onChange(onChange), 'Projected intersections keeps W equal to zero so you can inspect the 3D self-intersection. Hidden 4D passage performs the crossing by lifting localized strands into the fourth dimension.');
   withHelp(developer.add(params, 'devShowWPassage').name('show W passage').onChange(onChange), 'When enabled, ribbon sections with nonzero W remain visible, turn red, and become more translucent as their fourth-dimensional displacement increases.');

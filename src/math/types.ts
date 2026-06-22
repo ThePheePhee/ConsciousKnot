@@ -62,6 +62,7 @@ export interface Params {
   rotationX: number;
   rotationY: number;
   rotationZ: number;
+  autoRotate: boolean;
   diamondLightStrength: number;
   bloomStrength: number;
   coreSize: number;
@@ -117,8 +118,6 @@ export interface Params {
   devRibbonWidth: number;
   devLiftAmplitude: number;
   devProjectionDistance4D: number;
-  devCanonicalRelaxation: number;
-  devIntermediateRelaxation: number;
   devSimultaneousUncrossings: number;
   devCrossingMode: DevCrossingMode;
   devShowWPassage: boolean;

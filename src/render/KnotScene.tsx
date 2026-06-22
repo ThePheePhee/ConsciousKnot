@@ -96,8 +96,6 @@ export function KnotScene() {
         width: params.devRibbonWidth,
         liftAmplitude: params.devLiftAmplitude,
         projectionDistance4D: params.devProjectionDistance4D,
-        canonicalRelaxation: params.devCanonicalRelaxation,
-        intermediateRelaxation: params.devIntermediateRelaxation,
         simultaneousUncrossings: params.devSimultaneousUncrossings,
         crossingMode: params.devCrossingMode,
         showWPassage: params.devShowWPassage,
@@ -254,9 +252,10 @@ export function KnotScene() {
         else updateGeometry();
       }
 
-      knot.rotation.x += params.rotationX * 0.62 * delta * speed;
-      knot.rotation.y += params.rotationY * 0.62 * delta * speed;
-      knot.rotation.z += params.rotationZ * 0.62 * delta * speed;
+      const rotationSpeed = params.autoRotate ? speed : 0;
+      knot.rotation.x += params.rotationX * 0.62 * delta * rotationSpeed;
+      knot.rotation.y += params.rotationY * 0.62 * delta * rotationSpeed;
+      knot.rotation.z += params.rotationZ * 0.62 * delta * rotationSpeed;
       developerKnot.rotation.copy(knot.rotation);
       core.rotation.y -= 0.5 * delta * speed;
       core.scale.setScalar(params.coreSize / 0.42);
@@ -272,8 +271,9 @@ export function KnotScene() {
         sparkles[i].position.set(Math.cos(a) * 1.72, Math.sin(a) * 1.72, 0.35 * Math.sin(5 * a + time));
         sparkles[i].scale.setScalar(params.sparkleStrength * (0.55 + 0.45 * Math.sin(time * 2 + i)));
       }
-      camera.position.x = Math.sin(time * params.cameraOrbit) * 0.65;
-      camera.position.y = Math.cos(time * params.cameraOrbit * 0.7) * 0.25;
+      const cameraOrbitTime = params.autoRotate ? time * params.cameraOrbit : 0;
+      camera.position.x = Math.sin(cameraOrbitTime) * 0.65;
+      camera.position.y = Math.cos(cameraOrbitTime * 0.7) * 0.25;
       camera.position.z = 5.5 / params.cameraZoom;
       camera.lookAt(0, 0, 0);
       composer.render();
