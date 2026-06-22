@@ -28,24 +28,24 @@ export function createControlPanel(params: Params, onChange: () => void) {
   topology.add(params, 'symmetryOrder', 3, 12, 1).name('symmetry').onChange(onChange);
 
   const developer = gui.addFolder('Developer Mode');
-  developer.add(params, 'devTrajectorySize', 1, 4, 1).name('trajectory knots').onChange(onChange);
-  developer.add(params, 'devSourceKnot', devKnots).name('knot 1').onChange(onChange);
-  developer.add(params, 'devMidKnot', devKnots).name('knot 2').onChange(onChange);
-  developer.add(params, 'devTargetKnot', devKnots).name('knot 3').onChange(onChange);
-  developer.add(params, 'devFourthKnot', devKnots).name('knot 4').onChange(onChange);
-  developer.add(params, 'devSampleCount', 160, 1400, 1).name('samples').onFinishChange(onChange);
-  developer.add(params, 'devCrossSamples', 6, 32, 1).name('ribbon samples').onFinishChange(onChange);
-  developer.add(params, 'devRibbonWidth', 0.02, 0.2, 0.005).name('ribbon width').onChange(onChange);
-  developer.add(params, 'devLiftAmplitude', 0, 2.4, 0.01).name('4D lift').onChange(onChange);
-  developer.add(params, 'devProjectionDistance4D', 2.4, 9, 0.01).name('projection d4').onChange(onChange);
-  developer.add(params, 'devCanonicalRelaxation', 0, 0.85, 0.01).name('settle first').onChange(onChange);
-  developer.add(params, 'devIntermediateRelaxation', 0, 1, 0.01).name('settle between').onChange(onChange);
-  developer.add(params, 'devSimultaneousUncrossings', 1, 5, 1).name('parallel crossings').onChange(onChange);
-  developer.add(params, 'devCrossingMode', ['projected intersections', 'hidden 4D passage']).name('crossing view').onChange(onChange);
-  developer.add(params, 'devHideDuringUncrossing', 0, 1, 0.01).name('hide passage').onChange(onChange);
-  developer.add(params, 'devFourthDimensionDuty', 0.005, 0.25, 0.001).name('4D duty').onChange(onChange);
-  developer.add(params, 'devTwistEnabled').name('twisted ribbon').onChange(onChange);
-  developer.add(params, 'devTwistTurns', -12, 12, 1).name('twist turns').onChange(onChange);
+  withHelp(developer.add(params, 'devTrajectorySize', 1, 4, 1).name('trajectory knots').onChange(onChange), 'How many knots are used in the developer-mode path. A value of 2 means knot 1 goes directly to knot 2; higher values include the next selected knots as intermediate embeddings.');
+  withHelp(developer.add(params, 'devSourceKnot', devKnots).name('knot 1').onChange(onChange), 'The initial embedded 3D knot in the transition trajectory.');
+  withHelp(developer.add(params, 'devMidKnot', devKnots).name('knot 2').onChange(onChange), 'The second knot in the trajectory. With trajectory knots set to 2, this is the target knot.');
+  withHelp(developer.add(params, 'devTargetKnot', devKnots).name('knot 3').onChange(onChange), 'The third knot in a three- or four-step trajectory.');
+  withHelp(developer.add(params, 'devFourthKnot', devKnots).name('knot 4').onChange(onChange), 'The fourth knot in the longest developer trajectory.');
+  withHelp(developer.add(params, 'devSampleCount', 160, 1400, 1).name('samples').onFinishChange(onChange), 'Number of samples along the closed knot centerline. Higher values make smoother curves and more accurate crossings, but cost more CPU/GPU upload time in developer mode.');
+  withHelp(developer.add(params, 'devCrossSamples', 6, 32, 1).name('ribbon samples').onFinishChange(onChange), 'Number of samples across the ribbon width. Higher values make the ribbon surface smoother across its width.');
+  withHelp(developer.add(params, 'devRibbonWidth', 0.02, 0.2, 0.005).name('ribbon width').onChange(onChange), 'Physical width of the inspectable ribbon around the knot centerline.');
+  withHelp(developer.add(params, 'devLiftAmplitude', 0, 2.4, 0.01).name('4D lift').onChange(onChange), 'Maximum W-axis displacement during a crossing move. In hidden 4D passage mode, this is the actual fourth-dimensional excursion that separates strands without a 3D self-intersection.');
+  withHelp(developer.add(params, 'devProjectionDistance4D', 2.4, 9, 0.01).name('projection d4').onChange(onChange), 'Perspective distance used to project the 4D point (x,y,z,w) back into visible 3D. Smaller values make W excursions visually stronger.');
+  withHelp(developer.add(params, 'devCanonicalRelaxation', 0, 0.85, 0.01).name('settle first').onChange(onChange), 'How strongly the first segment eases toward its canonical low-energy-looking embedding before and after the crossing phase. This shapes the motion continuously; it no longer creates a hard pause.');
+  withHelp(developer.add(params, 'devIntermediateRelaxation', 0, 1, 0.01).name('settle between').onChange(onChange), 'How strongly intermediate trajectory segments smooth toward their canonical embeddings between knot changes. Higher values linger visually near recognizable knots without stopping the motion.');
+  withHelp(developer.add(params, 'devSimultaneousUncrossings', 1, 5, 1).name('parallel crossings').onChange(onChange), 'How many localized crossing windows are allowed at the same time along the ribbon. Lower values isolate one move; higher values show multiple W-axis passages in parallel.');
+  withHelp(developer.add(params, 'devCrossingMode', ['projected intersections', 'hidden 4D passage']).name('crossing view').onChange(onChange), 'Projected intersections keeps W equal to zero so you can inspect the 3D self-intersection. Hidden 4D passage performs the crossing by lifting localized strands into the fourth dimension.');
+  withHelp(developer.add(params, 'devHideDuringUncrossing', 0, 1, 0.01).name('hide passage').onChange(onChange), 'How much the ribbon narrows during the localized 4D passage. This is only a visual cue; the mathematical W excursion is controlled by 4D lift.');
+  withHelp(developer.add(params, 'devFourthDimensionDuty', 0.005, 0.25, 0.001).name('4D duty').onChange(onChange), 'Temporal width of the W-axis crossing window. Low values make brief excursions; higher values keep the crossing in 4D for a larger fraction of the transition.');
+  withHelp(developer.add(params, 'devTwistEnabled').name('twisted ribbon').onChange(onChange), 'Toggles framing twist on the ribbon. This rotates the ribbon frame around the 3D centerline; it should not move the knot centerline into W.');
+  withHelp(developer.add(params, 'devTwistTurns', -12, 12, 1).name('twist turns').onChange(onChange), 'Integer number of full rotations applied to the ribbon framing around the centerline.');
 
   const confinement = gui.addFolder('Spherical Confinement');
   confinement.add(params, 'confineProjectedSphere').name('3D sphere').onChange(onChange);
@@ -87,4 +87,29 @@ export function createControlPanel(params: Params, onChange: () => void) {
   }
   updateVisibility();
   return gui;
+}
+
+function withHelp<T extends { domElement: HTMLElement }>(controller: T, message: string) {
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.textContent = '?';
+  button.title = message;
+  button.style.width = '18px';
+  button.style.height = '18px';
+  button.style.marginLeft = '6px';
+  button.style.padding = '0';
+  button.style.border = '1px solid rgba(255, 255, 255, 0.35)';
+  button.style.borderRadius = '50%';
+  button.style.background = 'rgba(255, 255, 255, 0.08)';
+  button.style.color = '#ffffff';
+  button.style.fontSize = '11px';
+  button.style.lineHeight = '16px';
+  button.style.cursor = 'help';
+  button.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    window.alert(message);
+  });
+  controller.domElement.appendChild(button);
+  return controller;
 }

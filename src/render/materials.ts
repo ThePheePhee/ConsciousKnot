@@ -1,4 +1,4 @@
-import { AdditiveBlending, ShaderMaterial, SphereGeometry, Mesh, MeshBasicMaterial, Vector3 } from 'three';
+import { AdditiveBlending, DoubleSide, ShaderMaterial, SphereGeometry, Mesh, MeshBasicMaterial, Vector3 } from 'three';
 import vertexShader from '../shaders/ribbon4d.vert.glsl?raw';
 import classicVertexShader from '../shaders/ribbon.vert.glsl?raw';
 import fragmentShader from '../shaders/ribbon.frag.glsl?raw';
@@ -59,6 +59,7 @@ export function createClassicRibbonMaterial(params: Params) {
   return new ShaderMaterial({
     vertexShader: classicVertexShader,
     fragmentShader,
+    side: DoubleSide,
     uniforms: {
       time: { value: 0 },
       oilSlickStrength: { value: params.oilSlickStrength },

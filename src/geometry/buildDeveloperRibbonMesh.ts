@@ -69,16 +69,15 @@ function smootherstep(x: number) {
 }
 
 function stagedProgress(segmentT: number, segmentIndex: number, options: DeveloperRibbonOptions) {
-  const relax = Math.min(0.85, Math.max(0, segmentIndex === 0 ? options.canonicalRelaxation : options.intermediateRelaxation));
-  if (segmentT < relax) {
-    return { morph: 0, fourthDimensionWindow: 0 };
-  }
-  const crossingT = smootherstep((segmentT - relax) / Math.max(0.0001, 1 - relax));
+  const relaxation = Math.max(0, Math.min(1, segmentIndex === 0 ? options.canonicalRelaxation : options.intermediateRelaxation));
+  const linear = Math.max(0, Math.min(1, segmentT));
+  const eased = smootherstep(linear);
+  const morph = linear + (eased - linear) * relaxation;
   const duty = Math.max(0.015, options.fourthDimensionDuty);
-  const d = crossingT - 0.5;
+  const d = morph - 0.5;
   const fourthDimensionWindow = Math.exp(-(d * d) / (2 * duty * duty));
   return {
-    morph: crossingT,
+    morph,
     fourthDimensionWindow,
   };
 }
