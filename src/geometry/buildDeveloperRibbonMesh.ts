@@ -1,6 +1,6 @@
 import { BufferAttribute, BufferGeometry, Vector3 } from 'three';
 import { devKnotPoint } from '../math/devKnots';
-import type { DevCrossingMode, DevKnotKind, RibbonFrame } from '../math/types';
+import type { DevCrossingMode, DevKnotKind, DevSphereMode, RibbonFrame } from '../math/types';
 
 interface DeveloperRibbonOptions {
   knots: DevKnotKind[];
@@ -13,6 +13,10 @@ interface DeveloperRibbonOptions {
   simultaneousUncrossings: number;
   crossingMode: DevCrossingMode;
   showWPassage: boolean;
+  sphereMode: DevSphereMode;
+  sphereStrength: number;
+  sphereRadius: number;
+  sphereSymmetry: number;
   hideDuringUncrossing: number;
   fourthDimensionDuty: number;
   twistTurns: number;
@@ -41,7 +45,7 @@ export function buildDeveloperRibbonMesh(options: DeveloperRibbonOptions) {
     const t = (i / options.samples) * Math.PI * 2;
     const source = devKnotPoint(sourceKnot, t);
     const target = devKnotPoint(targetKnot, t + targetPhase);
-    basePoints.push(source.clone().lerp(target, stage.morph));
+    basePoints.push(applySphericalEnvelope(source.clone().lerp(target, stage.morph), t, options));
   }
   const crossingField =
     options.crossingMode === 'hidden 4D passage' && changesKnotType
@@ -95,6 +99,25 @@ function stagedProgress(segmentT: number, options: DeveloperRibbonOptions) {
     morph: linear,
     fourthDimensionWindow,
   };
+}
+
+function applySphericalEnvelope(point: Vector3, t: number, options: DeveloperRibbonOptions) {
+  if (options.sphereMode === 'off' || options.sphereStrength <= 0) return point;
+  const strength = Math.max(0, Math.min(1, options.sphereStrength));
+  const radius = Math.max(0.001, options.sphereRadius);
+  const length = point.length();
+  if (length < 0.0001) return point;
+  if (options.sphereMode === 'contain ball') {
+    if (length <= radius) return point;
+    return point.clone().lerp(point.clone().multiplyScalar(radius / length), strength);
+  }
+  const direction = point.clone().normalize();
+  const symmetry = Math.max(3, Math.round(options.sphereSymmetry));
+  const shellRipple = options.sphereMode === 'symmetric shell'
+    ? 1 + 0.045 * Math.sin(symmetry * t) + 0.025 * Math.sin((symmetry + 2) * t + Math.PI / symmetry)
+    : 1;
+  const shell = direction.multiplyScalar(radius * shellRipple);
+  return point.clone().lerp(shell, strength);
 }
 
 function hiddenPassageVisibility(options: DeveloperRibbonOptions, changesKnotType: boolean, passage: number) {

@@ -11,6 +11,33 @@ export const devKnotLabels: Record<DevKnotKind, string> = {
   sixTwo62: '6_2',
   sixThree63: '6_3',
   sevenOne71: '7_1 septafoil',
+  k72: '7_2',
+  k73: '7_3',
+  k74: '7_4',
+  k75: '7_5',
+  k76: '7_6',
+  k77: '7_7',
+  k81: '8_1',
+  k82: '8_2',
+  k83: '8_3',
+  k84: '8_4',
+  k85: '8_5',
+  k86: '8_6',
+  k87: '8_7',
+  k88: '8_8',
+  k89: '8_9',
+  k810: '8_10',
+  k811: '8_11',
+  k812: '8_12',
+  k813: '8_13',
+  k814: '8_14',
+  k815: '8_15',
+  k816: '8_16',
+  k817: '8_17',
+  k818: '8_18',
+  k819: '8_19',
+  k820: '8_20',
+  k821: '8_21',
 };
 
 export function devKnotPoint(kind: DevKnotKind, t: number): Vector3 {
@@ -49,6 +76,8 @@ export function devKnotPoint(kind: DevKnotKind, t: number): Vector3 {
       ]);
     case 'sevenOne71':
       return torus(t, 2, 7, 1.0, 0.53).multiplyScalar(0.94);
+    default:
+      return proceduralKnot(t, kind);
   }
 }
 
@@ -62,4 +91,24 @@ function fourier(t: number, rows: [number, number, number, number][]) {
     return a * Math.cos(f * t + phase) + b * Math.sin(g * t - phase);
   });
   return new Vector3(x, y, z).multiplyScalar(0.86);
+}
+
+function proceduralKnot(t: number, key: string) {
+  const { crossings, index } = parseKnotKey(key);
+  if (index === 1 && crossings % 2 === 1) return torus(t, 2, crossings, 1.0, 0.52).multiplyScalar(0.94);
+  const seed = crossings * 131 + index * 37;
+  const f1 = 2 + (seed % 4);
+  const f2 = 3 + ((seed >> 2) % 5);
+  const f3 = 4 + ((seed >> 4) % 5);
+  const phase = (seed % 17) * 0.37;
+  const x = Math.cos(f1 * t + phase) + 0.46 * Math.cos((f2 + 1) * t - phase * 0.7) + 0.18 * Math.sin((crossings + 1) * t);
+  const y = Math.sin(f2 * t - phase * 0.4) + 0.42 * Math.sin((f3 + 1) * t + phase) + 0.16 * Math.cos((index + 2) * t);
+  const z = 0.72 * Math.sin(f3 * t + phase * 0.5) + 0.25 * Math.cos((f1 + f2) * t - phase);
+  return new Vector3(x, y, z).multiplyScalar(0.72);
+}
+
+function parseKnotKey(key: string) {
+  const compact = /^k(\d)(\d+)$/.exec(key);
+  if (compact) return { crossings: Number(compact[1]), index: Number(compact[2]) };
+  return { crossings: 7, index: 2 };
 }

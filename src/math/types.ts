@@ -15,16 +15,8 @@ export type KnotKind =
 export type Mode = '3D Knot' | '4D Transition';
 export type TransitionPath = 'direct spherical' | 'three-step spherical' | 'local crossing';
 export type DevCrossingMode = 'projected intersections' | 'hidden 4D passage';
-export type DevKnotKind =
-  | 'unknot'
-  | 'trefoil31'
-  | 'figureEight41'
-  | 'cinquefoil51'
-  | 'twist52'
-  | 'stevedore61'
-  | 'sixTwo62'
-  | 'sixThree63'
-  | 'sevenOne71';
+export type DevSphereMode = 'off' | 'contain ball' | 'radial shell' | 'symmetric shell';
+export type DevKnotKind = string;
 
 export interface RibbonFrame {
   position: Vector3;
@@ -121,6 +113,10 @@ export interface Params {
   devSimultaneousUncrossings: number;
   devCrossingMode: DevCrossingMode;
   devShowWPassage: boolean;
+  devSphereMode: DevSphereMode;
+  devSphereStrength: number;
+  devSphereRadius: number;
+  devSphereSymmetry: number;
   devHideDuringUncrossing: number;
   devFourthDimensionDuty: number;
   devTwistEnabled: boolean;
