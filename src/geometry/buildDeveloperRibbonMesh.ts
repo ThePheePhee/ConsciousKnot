@@ -1,8 +1,7 @@
 import { BufferAttribute, BufferGeometry, Vector3, Vector4 } from 'three';
 import { devKnotPoint } from '../math/devKnots';
 import { project4Dto3D } from '../math/projection4';
-import { buildFrames } from '../math/frames3';
-import type { DevCrossingMode, DevKnotKind } from '../math/types';
+import type { DevCrossingMode, DevKnotKind, RibbonFrame } from '../math/types';
 
 interface DeveloperRibbonOptions {
   knots: DevKnotKind[];
@@ -30,12 +29,14 @@ const phaseCache = new Map<string, number>();
 
 export function buildDeveloperRibbonMesh(options: DeveloperRibbonOptions) {
   const knots = options.knots.length > 0 ? options.knots : ['unknot' as DevKnotKind];
-  const segmentCount = Math.max(1, knots.length - 1);
-  const segmentPosition = Math.min(0.999999, Math.max(0, options.progress)) * segmentCount;
+  const cyclic = knots.length > 1;
+  const segmentCount = cyclic ? knots.length : 1;
+  const wrappedProgress = ((options.progress % 1) + 1) % 1;
+  const segmentPosition = wrappedProgress * segmentCount;
   const segmentIndex = Math.min(segmentCount - 1, Math.floor(segmentPosition));
-  const segmentT = segmentCount === 1 && knots.length === 1 ? 0 : segmentPosition - segmentIndex;
-  const sourceKnot = knots[segmentIndex] ?? knots[0];
-  const targetKnot = knots[Math.min(segmentIndex + 1, knots.length - 1)] ?? sourceKnot;
+  const segmentT = cyclic ? segmentPosition - segmentIndex : 0;
+  const sourceKnot = knots[segmentIndex % knots.length] ?? knots[0];
+  const targetKnot = knots[(segmentIndex + 1) % knots.length] ?? sourceKnot;
   const changesKnotType = sourceKnot !== targetKnot;
   const targetPhase = alignedPhase(sourceKnot, targetKnot, options.samples);
   const stage = stagedProgress(segmentT, segmentIndex, options);
@@ -59,10 +60,7 @@ export function buildDeveloperRibbonMesh(options: DeveloperRibbonOptions) {
     visibility.push(hiddenPassageVisibility(options, changesKnotType, field.window));
     points.push(project4Dto3D(new Vector4(xyz.x, xyz.y, xyz.z, lift), options.projectionDistance4D));
   }
-  const frames = buildFrames(basePoints, 0);
-  for (let i = 0; i < frames.length; i++) {
-    frames[i].position.copy(points[i]);
-  }
+  const frames = buildUntwistedDeveloperFrames(basePoints, points);
   if (Math.abs(options.twistTurns) > 0.0001) {
     for (let i = 0; i < frames.length; i++) {
       const angle = options.twistTurns * Math.PI * 2 * (i / frames.length);
@@ -224,7 +222,50 @@ function alignedPhase(source: DevKnotKind, target: DevKnotKind, samples: number)
   return bestPhase;
 }
 
-function buildVariableRibbonMesh(frames: ReturnType<typeof buildFrames>, visibility: number[], width: number, edgeFlare: number, crossSamples: number) {
+function buildUntwistedDeveloperFrames(framePoints: Vector3[], displayPoints: Vector3[]) {
+  const n = framePoints.length;
+  const frames: RibbonFrame[] = [];
+  let previousNormal: Vector3 | null = null;
+  for (let i = 0; i < n; i++) {
+    const tangent = framePoints[(i + 1) % n].clone().sub(framePoints[(i - 1 + n) % n]).normalize();
+    let normal = projectedReferenceNormal(tangent, previousNormal);
+    if (previousNormal && normal.dot(previousNormal) < 0) normal.multiplyScalar(-1);
+    normal.sub(tangent.clone().multiplyScalar(normal.dot(tangent))).normalize();
+    const binormal = tangent.clone().cross(normal).normalize();
+    previousNormal = normal.clone();
+    frames.push({
+      position: displayPoints[i],
+      tangent,
+      normal,
+      binormal,
+      outward: displayPoints[i].clone().normalize(),
+      pinch: 1,
+    });
+  }
+  return frames;
+}
+
+function projectedReferenceNormal(tangent: Vector3, previousNormal: Vector3 | null) {
+  if (previousNormal) {
+    const transported = previousNormal.clone().sub(tangent.clone().multiplyScalar(previousNormal.dot(tangent)));
+    if (transported.lengthSq() > 0.0001) return transported.normalize();
+  }
+  const references = [new Vector3(0, 0, 1), new Vector3(0, 1, 0), new Vector3(1, 0, 0)];
+  let best = new Vector3(1, 0, 0);
+  let bestLength = -1;
+  for (const reference of references) {
+    const projected = reference.clone().sub(tangent.clone().multiplyScalar(reference.dot(tangent)));
+    const length = projected.lengthSq();
+    if (length > bestLength) {
+      best = projected;
+      bestLength = length;
+    }
+  }
+  if (bestLength < 0.0001 && previousNormal) return previousNormal.clone();
+  return best.normalize();
+}
+
+function buildVariableRibbonMesh(frames: RibbonFrame[], visibility: number[], width: number, edgeFlare: number, crossSamples: number) {
   const positions: number[] = [];
   const normals: number[] = [];
   const uvs: number[] = [];
