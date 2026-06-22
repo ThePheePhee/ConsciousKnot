@@ -21,6 +21,11 @@ interface DeveloperRibbonOptions {
   twistTurns: number;
 }
 
+interface CrossingField {
+  signedLift: number;
+  window: number;
+}
+
 const phaseCache = new Map<string, number>();
 
 export function buildDeveloperRibbonMesh(options: DeveloperRibbonOptions) {
@@ -34,17 +39,24 @@ export function buildDeveloperRibbonMesh(options: DeveloperRibbonOptions) {
   const changesKnotType = sourceKnot !== targetKnot;
   const targetPhase = alignedPhase(sourceKnot, targetKnot, options.samples);
   const stage = stagedProgress(segmentT, segmentIndex, options);
-  const points: Vector3[] = [];
-  const visibility: number[] = [];
+  const basePoints: Vector3[] = [];
   for (let i = 0; i < options.samples; i++) {
     const t = (i / options.samples) * Math.PI * 2;
     const source = devKnotPoint(sourceKnot, t);
     const target = devKnotPoint(targetKnot, t + targetPhase);
-    const xyz = source.clone().lerp(target, smootherstep(stage.morph));
-    const local = localizedLift(t, segmentIndex, options.simultaneousUncrossings);
-    const passage = stage.fourthDimensionWindow * local.window;
-    const lift = options.crossingMode === 'projected intersections' || !changesKnotType ? 0 : options.liftAmplitude * stage.fourthDimensionWindow * local.signedLift;
-    visibility.push(hiddenPassageVisibility(options, changesKnotType, passage));
+    basePoints.push(source.clone().lerp(target, smootherstep(stage.morph)));
+  }
+  const crossingField =
+    options.crossingMode === 'hidden 4D passage' && changesKnotType
+      ? detectCrossingField(basePoints, options)
+      : evenlySpacedCrossingField(options.samples, segmentIndex, options.simultaneousUncrossings, stage.fourthDimensionWindow);
+  const points: Vector3[] = [];
+  const visibility: number[] = [];
+  for (let i = 0; i < options.samples; i++) {
+    const xyz = basePoints[i];
+    const field = crossingField[i];
+    const lift = options.crossingMode === 'projected intersections' || !changesKnotType ? 0 : options.liftAmplitude * field.signedLift;
+    visibility.push(hiddenPassageVisibility(options, changesKnotType, field.window));
     points.push(project4Dto3D(new Vector4(xyz.x, xyz.y, xyz.z, lift), options.projectionDistance4D));
   }
   const frames = buildFrames(points, 0);
@@ -93,6 +105,19 @@ function hiddenPassageVisibility(options: DeveloperRibbonOptions, changesKnotTyp
   return Math.max(0, 1 - Math.max(userNarrowing, hardOcclusion));
 }
 
+function evenlySpacedCrossingField(samples: number, segmentIndex: number, simultaneousUncrossings: number, temporalWindow: number) {
+  const field: CrossingField[] = [];
+  for (let i = 0; i < samples; i++) {
+    const t = (i / samples) * Math.PI * 2;
+    const local = localizedLift(t, segmentIndex, simultaneousUncrossings);
+    field.push({
+      signedLift: temporalWindow * local.signedLift,
+      window: temporalWindow * local.window,
+    });
+  }
+  return field;
+}
+
 function localizedLift(t: number, segmentIndex: number, simultaneousUncrossings: number) {
   const count = Math.max(1, Math.round(simultaneousUncrossings));
   let signedLift = 0;
@@ -108,6 +133,68 @@ function localizedLift(t: number, segmentIndex: number, simultaneousUncrossings:
     signedLift: signedLift / Math.sqrt(count),
     window: Math.min(1, windowSum),
   };
+}
+
+function detectCrossingField(points: Vector3[], options: DeveloperRibbonOptions) {
+  const n = points.length;
+  const field = Array.from({ length: n }, () => ({ signedLift: 0, window: 0 }));
+  const maxCrossings = Math.max(1, Math.round(options.simultaneousUncrossings));
+  const minSeparation = Math.max(24, Math.floor(n * 0.045));
+  const innerRadius = Math.max(options.width * 1.15, 0.035);
+  const outerRadius = Math.max(options.width * 4.25, 0.16);
+  const candidates: { a: number; b: number; distance: number }[] = [];
+
+  for (let a = 0; a < n; a++) {
+    let bestB = -1;
+    let bestDistanceSq = outerRadius * outerRadius;
+    for (let b = a + minSeparation; b < n; b++) {
+      const wrapped = Math.min(b - a, n - (b - a));
+      if (wrapped < minSeparation) continue;
+      const distanceSq = points[a].distanceToSquared(points[b]);
+      if (distanceSq < bestDistanceSq) {
+        bestDistanceSq = distanceSq;
+        bestB = b;
+      }
+    }
+    if (bestB >= 0) {
+      candidates.push({ a, b: bestB, distance: Math.sqrt(bestDistanceSq) });
+    }
+  }
+
+  candidates.sort((left, right) => left.distance - right.distance);
+  const accepted: typeof candidates = [];
+  for (const candidate of candidates) {
+    if (accepted.length >= maxCrossings) break;
+    const overlaps = accepted.some((existing) => {
+      return cyclicIndexDistance(candidate.a, existing.a, n) < minSeparation || cyclicIndexDistance(candidate.a, existing.b, n) < minSeparation || cyclicIndexDistance(candidate.b, existing.a, n) < minSeparation || cyclicIndexDistance(candidate.b, existing.b, n) < minSeparation;
+    });
+    if (!overlaps) accepted.push(candidate);
+  }
+
+  for (let crossingIndex = 0; crossingIndex < accepted.length; crossingIndex++) {
+    const candidate = accepted[crossingIndex];
+    const collisionStrength = 1 - smoothRange(innerRadius, outerRadius, candidate.distance);
+    if (collisionStrength <= 0) continue;
+    paintCrossingWindow(field, candidate.a, 1, collisionStrength, n);
+    paintCrossingWindow(field, candidate.b, -1, collisionStrength, n);
+  }
+  return field;
+}
+
+function paintCrossingWindow(field: CrossingField[], center: number, sign: number, strength: number, samples: number) {
+  const radius = Math.max(8, Math.floor(samples * 0.022));
+  for (let offset = -radius; offset <= radius; offset++) {
+    const index = (center + offset + samples) % samples;
+    const u = Math.abs(offset) / radius;
+    const window = strength * smootherstep(1 - u);
+    field[index].window = Math.max(field[index].window, window);
+    field[index].signedLift += sign * window;
+  }
+}
+
+function cyclicIndexDistance(a: number, b: number, samples: number) {
+  const d = Math.abs(a - b);
+  return Math.min(d, samples - d);
 }
 
 function alignedPhase(source: DevKnotKind, target: DevKnotKind, samples: number) {
