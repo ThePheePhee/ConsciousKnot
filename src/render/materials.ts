@@ -61,7 +61,7 @@ export function createClassicRibbonMaterial(params: Params) {
     fragmentShader,
     side: DoubleSide,
     transparent: true,
-    depthWrite: false,
+    depthWrite: true,
     uniforms: {
       time: { value: 0 },
       oilSlickStrength: { value: params.oilSlickStrength },

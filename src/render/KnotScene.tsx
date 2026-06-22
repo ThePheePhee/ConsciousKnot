@@ -3,6 +3,7 @@ import {
   AdditiveBlending,
   BufferGeometry,
   Color,
+  Group,
   Mesh,
   MeshBasicMaterial,
   PerspectiveCamera,
@@ -52,12 +53,14 @@ export function KnotScene() {
     composer.addPass(bloom);
 
     addLights(scene);
+    const interactionRig = new Group();
+    scene.add(interactionRig);
     const material = createRibbonMaterial(params);
     const knot = new Mesh(new BufferGeometry(), material);
-    scene.add(knot);
+    interactionRig.add(knot);
     const developerMaterial = createClassicRibbonMaterial(params);
     const developerKnot = new Mesh(new BufferGeometry(), developerMaterial);
-    scene.add(developerKnot);
+    interactionRig.add(developerKnot);
     let phaseCacheKey = '';
     let phaseSourceMid = 0;
     let phaseSourceTarget = 0;
@@ -65,13 +68,13 @@ export function KnotScene() {
 
     const core = createCore(params.coreSize);
     core.visible = false;
-    scene.add(core);
+    interactionRig.add(core);
     const sparkleMaterial = new MeshBasicMaterial({ color: 0xeef8ff, transparent: true, opacity: 0.48, blending: AdditiveBlending });
     const sparkles = Array.from({ length: 6 }, (_, i) => {
       const s = new Mesh(new SphereGeometry(0.012, 12, 8), sparkleMaterial);
       const a = (i / 10) * Math.PI * 2;
       s.position.set(Math.cos(a) * 1.75, Math.sin(a) * 1.75, 0.12 * Math.sin(5 * a));
-      scene.add(s);
+      interactionRig.add(s);
       return s;
     });
 
@@ -200,6 +203,7 @@ export function KnotScene() {
       dragging = true;
       lastPointerX = event.clientX;
       lastPointerY = event.clientY;
+      renderer.domElement.style.cursor = 'grabbing';
       renderer.domElement.setPointerCapture(event.pointerId);
     };
     const onPointerMove = (event: PointerEvent) => {
@@ -208,15 +212,16 @@ export function KnotScene() {
       const dy = event.clientY - lastPointerY;
       lastPointerX = event.clientX;
       lastPointerY = event.clientY;
-      knot.rotation.y += dx * 0.006;
-      knot.rotation.x += dy * 0.006;
-      developerKnot.rotation.copy(knot.rotation);
+      interactionRig.rotation.y += dx * 0.006;
+      interactionRig.rotation.x += dy * 0.006;
     };
     const onPointerUp = (event: PointerEvent) => {
       dragging = false;
+      renderer.domElement.style.cursor = 'grab';
       if (renderer.domElement.hasPointerCapture(event.pointerId)) renderer.domElement.releasePointerCapture(event.pointerId);
     };
     renderer.domElement.style.cursor = 'grab';
+    renderer.domElement.style.touchAction = 'none';
     renderer.domElement.addEventListener('pointerdown', onPointerDown);
     renderer.domElement.addEventListener('pointermove', onPointerMove);
     renderer.domElement.addEventListener('pointerup', onPointerUp);
@@ -230,7 +235,7 @@ export function KnotScene() {
       const now = performance.now();
       const delta = Math.min(0.05, (now - lastNow) / 1000);
       lastNow = now;
-      const speed = params.paused ? 0 : params.globalSpeed;
+      const speed = params.paused || dragging ? 0 : params.globalSpeed;
       time += delta * speed;
       frame++;
       if (params.paused) {
