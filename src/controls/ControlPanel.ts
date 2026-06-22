@@ -43,7 +43,7 @@ export function createControlPanel(params: Params, onChange: () => void) {
   developer.add(params, 'devSimultaneousUncrossings', 1, 5, 1).name('parallel crossings').onChange(onChange);
   developer.add(params, 'devCrossingMode', ['projected intersections', 'hidden 4D passage']).name('crossing view').onChange(onChange);
   developer.add(params, 'devHideDuringUncrossing', 0, 1, 0.01).name('hide passage').onChange(onChange);
-  developer.add(params, 'devFourthDimensionDuty', 0.03, 0.45, 0.005).name('4D duty').onChange(onChange);
+  developer.add(params, 'devFourthDimensionDuty', 0.005, 0.25, 0.001).name('4D duty').onChange(onChange);
   developer.add(params, 'devTwistEnabled').name('twisted ribbon').onChange(onChange);
   developer.add(params, 'devTwistTurns', -12, 12, 1).name('twist turns').onChange(onChange);
 

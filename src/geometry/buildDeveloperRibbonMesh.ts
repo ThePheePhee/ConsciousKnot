@@ -31,6 +31,7 @@ export function buildDeveloperRibbonMesh(options: DeveloperRibbonOptions) {
   const segmentT = segmentCount === 1 && knots.length === 1 ? 0 : segmentPosition - segmentIndex;
   const sourceKnot = knots[segmentIndex] ?? knots[0];
   const targetKnot = knots[Math.min(segmentIndex + 1, knots.length - 1)] ?? sourceKnot;
+  const changesKnotType = sourceKnot !== targetKnot;
   const targetPhase = alignedPhase(sourceKnot, targetKnot, options.samples);
   const stage = stagedProgress(segmentT, segmentIndex, options);
   const points: Vector3[] = [];
@@ -41,9 +42,9 @@ export function buildDeveloperRibbonMesh(options: DeveloperRibbonOptions) {
     const target = devKnotPoint(targetKnot, t + targetPhase);
     const xyz = source.clone().lerp(target, smootherstep(stage.morph));
     const local = localizedLift(t, segmentIndex, options.simultaneousUncrossings);
-    const lift = options.crossingMode === 'projected intersections' ? 0 : options.liftAmplitude * stage.fourthDimensionWindow * local.signedLift;
-    const hidden = options.crossingMode === 'hidden 4D passage' ? options.hideDuringUncrossing * stage.fourthDimensionWindow * local.window : 0;
-    visibility.push(Math.max(0.025, 1 - hidden));
+    const lift = options.crossingMode === 'projected intersections' || !changesKnotType ? 0 : options.liftAmplitude * stage.fourthDimensionWindow * local.signedLift;
+    const hidden = options.crossingMode === 'hidden 4D passage' && changesKnotType ? options.hideDuringUncrossing * stage.fourthDimensionWindow * local.window : 0;
+    visibility.push(Math.max(0.18, 1 - hidden));
     points.push(project4Dto3D(new Vector4(xyz.x, xyz.y, xyz.z, lift), options.projectionDistance4D));
   }
   const frames = buildFrames(points, 0);
@@ -157,8 +158,6 @@ function buildVariableRibbonMesh(frames: ReturnType<typeof buildFrames>, visibil
   for (let i = 0; i < n; i++) {
     const ni = (i + 1) % n;
     for (let j = 0; j < m - 1; j++) {
-      const hiddenQuad = (visibility[i] ?? 1) < 0.06 && (visibility[ni] ?? 1) < 0.06;
-      if (hiddenQuad) continue;
       const a = i * m + j;
       const b = ni * m + j;
       const c = ni * m + j + 1;

@@ -72,9 +72,9 @@ export const defaultParams: Params = {
   devCanonicalRelaxation: 0.35,
   devIntermediateRelaxation: 0.55,
   devSimultaneousUncrossings: 1,
-  devCrossingMode: 'hidden 4D passage',
-  devHideDuringUncrossing: 0.92,
-  devFourthDimensionDuty: 0.11,
+  devCrossingMode: 'projected intersections',
+  devHideDuringUncrossing: 0.75,
+  devFourthDimensionDuty: 0.035,
   devTwistEnabled: false,
   devTwistTurns: 0,
 };
