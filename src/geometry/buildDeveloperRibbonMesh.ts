@@ -59,7 +59,10 @@ export function buildDeveloperRibbonMesh(options: DeveloperRibbonOptions) {
     visibility.push(hiddenPassageVisibility(options, changesKnotType, field.window));
     points.push(project4Dto3D(new Vector4(xyz.x, xyz.y, xyz.z, lift), options.projectionDistance4D));
   }
-  const frames = buildFrames(points, 0);
+  const frames = buildFrames(basePoints, 0);
+  for (let i = 0; i < frames.length; i++) {
+    frames[i].position.copy(points[i]);
+  }
   if (Math.abs(options.twistTurns) > 0.0001) {
     for (let i = 0; i < frames.length; i++) {
       const angle = options.twistTurns * Math.PI * 2 * (i / frames.length);
@@ -85,7 +88,7 @@ function smootherstep(x: number) {
 }
 
 function stagedProgress(segmentT: number, segmentIndex: number, options: DeveloperRibbonOptions) {
-  const relaxation = Math.max(0, Math.min(1, segmentIndex === 0 ? options.canonicalRelaxation : options.intermediateRelaxation));
+  const relaxation = Math.max(0, Math.min(0.92, segmentIndex === 0 ? options.canonicalRelaxation : options.intermediateRelaxation));
   const linear = Math.max(0, Math.min(1, segmentT));
   const eased = smootherstep(linear);
   const morph = linear + (eased - linear) * relaxation;

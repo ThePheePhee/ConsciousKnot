@@ -205,7 +205,7 @@ export function KnotScene() {
       frame++;
       if (params.autoTransitionSpeed > 0 && speed > 0) {
         transitionClock = (transitionClock + delta * speed * params.autoTransitionSpeed) % 1;
-        params.transitionProgress = 0.5 - 0.5 * Math.cos(transitionClock * Math.PI * 2);
+        params.transitionProgress = params.developerMode ? pingPong(transitionClock) : 0.5 - 0.5 * Math.cos(transitionClock * Math.PI * 2);
         if (params.developerMode) dirty = true;
       } else if (params.autoTransitionSpeed === 0) {
         transitionClock = params.transitionProgress;
@@ -266,6 +266,11 @@ export function KnotScene() {
       <div ref={mountRef} style={{ width: '100vw', height: '100vh' }} />
     </>
   );
+}
+
+function pingPong(phase: number) {
+  const t = phase < 0.5 ? phase * 2 : 2 - phase * 2;
+  return Math.max(0, Math.min(1, t));
 }
 
 function alignedPhase(sourceKind: KnotKind, targetKind: KnotKind, params: Params) {
