@@ -121,6 +121,7 @@ export interface Params {
   devIntermediateRelaxation: number;
   devSimultaneousUncrossings: number;
   devCrossingMode: DevCrossingMode;
+  devShowWPassage: boolean;
   devHideDuringUncrossing: number;
   devFourthDimensionDuty: number;
   devTwistEnabled: boolean;

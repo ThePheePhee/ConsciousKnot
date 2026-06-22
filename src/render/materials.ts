@@ -60,6 +60,8 @@ export function createClassicRibbonMaterial(params: Params) {
     vertexShader: classicVertexShader,
     fragmentShader,
     side: DoubleSide,
+    transparent: true,
+    depthWrite: false,
     uniforms: {
       time: { value: 0 },
       oilSlickStrength: { value: params.oilSlickStrength },

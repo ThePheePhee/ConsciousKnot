@@ -15,6 +15,7 @@ interface DeveloperRibbonOptions {
   intermediateRelaxation: number;
   simultaneousUncrossings: number;
   crossingMode: DevCrossingMode;
+  showWPassage: boolean;
   hideDuringUncrossing: number;
   fourthDimensionDuty: number;
   twistTurns: number;
@@ -50,12 +51,17 @@ export function buildDeveloperRibbonMesh(options: DeveloperRibbonOptions) {
       ? detectCrossingField(basePoints, options, stage.fourthDimensionWindow)
       : evenlySpacedCrossingField(options.samples, segmentIndex, options.simultaneousUncrossings, stage.fourthDimensionWindow);
   const points: Vector3[] = [];
-  const visibility: number[] = [];
+  const widthScale: number[] = [];
+  const wIntensity: number[] = [];
+  const wAlpha: number[] = [];
   for (let i = 0; i < options.samples; i++) {
     const xyz = basePoints[i];
     const field = crossingField[i];
     const lift = options.crossingMode === 'projected intersections' || !changesKnotType ? 0 : options.liftAmplitude * field.signedLift;
-    visibility.push(hiddenPassageVisibility(options, changesKnotType, field.window));
+    const passage = Math.max(0, Math.min(1, field.window));
+    widthScale.push(options.showWPassage ? 1 : hiddenPassageVisibility(options, changesKnotType, passage));
+    wIntensity.push(options.showWPassage && options.crossingMode === 'hidden 4D passage' ? passage : 0);
+    wAlpha.push(options.showWPassage && options.crossingMode === 'hidden 4D passage' ? 1 - 0.86 * passage : 1);
     points.push(project4Dto3D(new Vector4(xyz.x, xyz.y, xyz.z, lift), options.projectionDistance4D));
   }
   const frames = buildRadialDeveloperFrames(basePoints, points);
@@ -66,7 +72,7 @@ export function buildDeveloperRibbonMesh(options: DeveloperRibbonOptions) {
       frames[i].binormal.crossVectors(frames[i].tangent, frames[i].normal).normalize();
     }
   }
-  return buildVariableRibbonMesh(frames, visibility, options.width, 0.2, options.crossSamples);
+  return buildVariableRibbonMesh(frames, widthScale, wIntensity, wAlpha, options.width, 0.2, options.crossSamples);
 }
 
 function smoothstep(x: number) {
@@ -258,22 +264,24 @@ function projectedReferenceNormal(tangent: Vector3) {
   return best.normalize();
 }
 
-function buildVariableRibbonMesh(frames: RibbonFrame[], visibility: number[], width: number, edgeFlare: number, crossSamples: number) {
+function buildVariableRibbonMesh(frames: RibbonFrame[], widthScale: number[], wIntensity: number[], wAlpha: number[], width: number, edgeFlare: number, crossSamples: number) {
   const positions: number[] = [];
   const normals: number[] = [];
   const uvs: number[] = [];
+  const wIntensities: number[] = [];
+  const wAlphas: number[] = [];
   const indices: number[] = [];
   const n = frames.length;
   const m = crossSamples;
 
   for (let i = 0; i < n; i++) {
     const f = frames[i];
-    const widthScale = visibility[i] ?? 1;
+    const localScale = widthScale[i] ?? 1;
     for (let j = 0; j < m; j++) {
       const v = j / (m - 1);
       const u = v * 2 - 1;
       const edge = Math.pow(Math.abs(u), 3.4);
-      const localWidth = width * widthScale;
+      const localWidth = width * localScale;
       const pos = f.position
         .clone()
         .add(f.normal.clone().multiplyScalar(localWidth * u))
@@ -286,13 +294,15 @@ function buildVariableRibbonMesh(frames: RibbonFrame[], visibility: number[], wi
       positions.push(pos.x, pos.y, pos.z);
       normals.push(normal.x, normal.y, normal.z);
       uvs.push(i / n, v);
+      wIntensities.push(wIntensity[i] ?? 0);
+      wAlphas.push(wAlpha[i] ?? 1);
     }
   }
 
   for (let i = 0; i < n; i++) {
     const ni = (i + 1) % n;
-    const visibleA = (visibility[i] ?? 1) > 0.035;
-    const visibleB = (visibility[ni] ?? 1) > 0.035;
+    const visibleA = (widthScale[i] ?? 1) > 0.035;
+    const visibleB = (widthScale[ni] ?? 1) > 0.035;
     if (!visibleA || !visibleB) continue;
     for (let j = 0; j < m - 1; j++) {
       const a = i * m + j;
@@ -307,6 +317,8 @@ function buildVariableRibbonMesh(frames: RibbonFrame[], visibility: number[], wi
   geometry.setAttribute('position', new BufferAttribute(new Float32Array(positions), 3));
   geometry.setAttribute('normal', new BufferAttribute(new Float32Array(normals), 3));
   geometry.setAttribute('uv', new BufferAttribute(new Float32Array(uvs), 2));
+  geometry.setAttribute('aWIntensity', new BufferAttribute(new Float32Array(wIntensities), 1));
+  geometry.setAttribute('aWAlpha', new BufferAttribute(new Float32Array(wAlphas), 1));
   geometry.setIndex(indices);
   geometry.computeBoundingSphere();
   return geometry;

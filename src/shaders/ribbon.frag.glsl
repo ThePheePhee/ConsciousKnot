@@ -14,6 +14,8 @@ varying vec2 vUv;
 varying vec3 vNormal;
 varying vec3 vWorldPosition;
 varying vec3 vViewDir;
+varying float vWIntensity;
+varying float vWAlpha;
 
 float hash(vec2 p) {
   return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
@@ -62,7 +64,9 @@ void main() {
   color += strandColor * strands * fibreStrength * 0.82;
   color += white * (fresnel * 0.52 + edge * 0.42 + coreGlow);
   color += palette(longitudinal + 0.43) * strands * fibreStrength * 0.24;
+  float w = clamp(vWIntensity, 0.0, 1.0);
+  color = mix(color, vec3(1.0, 0.04, 0.02) + color * 0.16, w);
   color = color / (vec3(1.0) + color * 0.38);
   color = pow(color, vec3(0.9));
-  gl_FragColor = vec4(color, 1.0);
+  gl_FragColor = vec4(color, clamp(vWAlpha, 0.08, 1.0));
 }

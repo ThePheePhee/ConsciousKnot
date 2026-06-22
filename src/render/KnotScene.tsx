@@ -97,6 +97,7 @@ export function KnotScene() {
         intermediateRelaxation: params.devIntermediateRelaxation,
         simultaneousUncrossings: params.devSimultaneousUncrossings,
         crossingMode: params.devCrossingMode,
+        showWPassage: params.devShowWPassage,
         hideDuringUncrossing: params.devHideDuringUncrossing,
         fourthDimensionDuty: params.devFourthDimensionDuty,
         twistTurns: params.devTwistEnabled ? params.devTwistTurns : 0,

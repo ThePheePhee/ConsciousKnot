@@ -41,6 +41,8 @@ varying vec2 vUv;
 varying vec3 vNormal;
 varying vec3 vWorldPosition;
 varying vec3 vViewDir;
+varying float vWIntensity;
+varying float vWAlpha;
 
 const float PI = 3.141592653589793;
 const float TAU = 6.283185307179586;
@@ -197,6 +199,8 @@ void main() {
   vec3 ribbonNormal = normalize(binormal * 0.36 + outward * (0.84 + edge * 0.7) + side * crossU * edgeFlare * 0.18);
 
   vUv = uv;
+  vWIntensity = 0.0;
+  vWAlpha = 1.0;
   vec4 world = modelMatrix * vec4(ribbonPos, 1.0);
   vWorldPosition = world.xyz;
   vNormal = normalize(mat3(modelMatrix) * ribbonNormal);

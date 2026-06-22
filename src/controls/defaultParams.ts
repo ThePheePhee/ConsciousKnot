@@ -73,6 +73,7 @@ export const defaultParams: Params = {
   devIntermediateRelaxation: 0.55,
   devSimultaneousUncrossings: 1,
   devCrossingMode: 'hidden 4D passage',
+  devShowWPassage: false,
   devHideDuringUncrossing: 0.45,
   devFourthDimensionDuty: 0.12,
   devTwistEnabled: false,
