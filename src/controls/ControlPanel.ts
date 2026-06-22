@@ -14,7 +14,7 @@ export function createControlPanel(params: Params, onChange: () => void) {
 
   gui.add(params, 'developerMode').name('developer mode').onChange(changed);
   gui.add(params, 'paused').name('pause');
-  gui.add(params, 'globalSpeed', 0, 8, 0.01).name('speed');
+  gui.add(params, 'globalSpeed', 0, 2, 0.001).name('speed');
   gui.add(params, 'transitionProgress', 0, 1, 0.001).name('transition').onChange(onChange);
   gui.add(params, 'autoTransitionSpeed', 0, 1, 0.001).name('auto cycle');
   gui.add(params, 'cameraZoom', 0.45, 3.5, 0.01).name('zoom');
@@ -37,7 +37,6 @@ export function createControlPanel(params: Params, onChange: () => void) {
   withHelp(developer.add(params, 'devCrossSamples', 6, 32, 1).name('ribbon samples').onFinishChange(onChange), 'Number of samples across the ribbon width. Higher values make the ribbon surface smoother across its width.');
   withHelp(developer.add(params, 'devRibbonWidth', 0.02, 0.2, 0.005).name('ribbon width').onChange(onChange), 'Physical width of the inspectable ribbon around the knot centerline.');
   withHelp(developer.add(params, 'devLiftAmplitude', 0, 2.4, 0.01).name('4D lift').onChange(onChange), 'Maximum W-axis displacement during a crossing move. In hidden 4D passage mode, this is the actual fourth-dimensional excursion that separates strands without a 3D self-intersection.');
-  withHelp(developer.add(params, 'devProjectionDistance4D', 2.4, 9, 0.01).name('projection d4').onChange(onChange), 'Perspective distance used to project the 4D point (x,y,z,w) back into visible 3D. Smaller values make W excursions visually stronger.');
   withHelp(developer.add(params, 'devCanonicalRelaxation', 0, 0.85, 0.01).name('settle first').onChange(onChange), 'How strongly the first segment eases toward its canonical low-energy-looking embedding before and after the crossing phase. This shapes the motion continuously; it no longer creates a hard pause.');
   withHelp(developer.add(params, 'devIntermediateRelaxation', 0, 1, 0.01).name('settle between').onChange(onChange), 'How strongly intermediate trajectory segments smooth toward their canonical embeddings between knot changes. Higher values linger visually near recognizable knots without stopping the motion.');
   withHelp(developer.add(params, 'devSimultaneousUncrossings', 1, 5, 1).name('parallel crossings').onChange(onChange), 'How many localized crossing windows are allowed at the same time along the ribbon. Lower values isolate one move; higher values show multiple W-axis passages in parallel.');

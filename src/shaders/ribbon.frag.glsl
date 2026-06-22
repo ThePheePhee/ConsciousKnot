@@ -65,7 +65,7 @@ void main() {
   color += white * (fresnel * 0.52 + edge * 0.42 + coreGlow);
   color += palette(longitudinal + 0.43) * strands * fibreStrength * 0.24;
   float w = clamp(vWIntensity, 0.0, 1.0);
-  color = mix(color, vec3(1.0, 0.04, 0.02) + color * 0.16, w);
+  color = mix(color, vec3(3.4, 0.0, 0.0), w);
   color = color / (vec3(1.0) + color * 0.38);
   color = pow(color, vec3(0.9));
   gl_FragColor = vec4(color, clamp(vWAlpha, 0.08, 1.0));

@@ -1,6 +1,5 @@
-import { BufferAttribute, BufferGeometry, Vector3, Vector4 } from 'three';
+import { BufferAttribute, BufferGeometry, Vector3 } from 'three';
 import { devKnotPoint } from '../math/devKnots';
-import { project4Dto3D } from '../math/projection4';
 import type { DevCrossingMode, DevKnotKind, RibbonFrame } from '../math/types';
 
 interface DeveloperRibbonOptions {
@@ -57,12 +56,12 @@ export function buildDeveloperRibbonMesh(options: DeveloperRibbonOptions) {
   for (let i = 0; i < options.samples; i++) {
     const xyz = basePoints[i];
     const field = crossingField[i];
-    const lift = options.crossingMode === 'projected intersections' || !changesKnotType ? 0 : options.liftAmplitude * field.signedLift;
     const passage = Math.max(0, Math.min(1, field.window));
+    const wDepth = Math.max(0, Math.min(1, Math.abs(field.signedLift)));
     widthScale.push(options.showWPassage ? 1 : hiddenPassageVisibility(options, changesKnotType, passage));
-    wIntensity.push(options.showWPassage && options.crossingMode === 'hidden 4D passage' ? passage : 0);
-    wAlpha.push(options.showWPassage && options.crossingMode === 'hidden 4D passage' ? 1 - 0.86 * passage : 1);
-    points.push(project4Dto3D(new Vector4(xyz.x, xyz.y, xyz.z, lift), options.projectionDistance4D));
+    wIntensity.push(options.showWPassage && options.crossingMode === 'hidden 4D passage' && wDepth > 0.0001 ? 1 : 0);
+    wAlpha.push(options.showWPassage && options.crossingMode === 'hidden 4D passage' ? 1 - 0.9 * smootherstep(wDepth) : 1);
+    points.push(xyz.clone());
   }
   const frames = buildRadialDeveloperFrames(basePoints, points);
   if (Math.abs(options.twistTurns) > 0.0001) {
@@ -146,8 +145,8 @@ function detectCrossingField(points: Vector3[], options: DeveloperRibbonOptions,
   if (temporalWindow < 0.01) return field;
   const maxCrossings = Math.max(1, Math.round(options.simultaneousUncrossings));
   const minSeparation = Math.max(24, Math.floor(n * 0.045));
-  const innerRadius = Math.max(options.width * 1.15, 0.035);
-  const outerRadius = Math.max(options.width * 4.25, 0.16);
+  const innerRadius = Math.max(options.width * 1.75, 0.045);
+  const outerRadius = Math.max(options.width * 7.5, 0.24);
   const candidates: { a: number; b: number; distance: number }[] = [];
 
   for (let a = 0; a < n; a++) {
@@ -156,7 +155,12 @@ function detectCrossingField(points: Vector3[], options: DeveloperRibbonOptions,
     for (let b = a + minSeparation; b < n; b++) {
       const wrapped = Math.min(b - a, n - (b - a));
       if (wrapped < minSeparation) continue;
-      const distanceSq = points[a].distanceToSquared(points[b]);
+      const dx = points[a].x - points[b].x;
+      const dy = points[a].y - points[b].y;
+      const dz = Math.abs(points[a].z - points[b].z);
+      const screenDistanceSq = dx * dx + dy * dy;
+      const depthPenalty = 0.018 * dz * dz;
+      const distanceSq = screenDistanceSq + depthPenalty;
       if (distanceSq < bestDistanceSq) {
         bestDistanceSq = distanceSq;
         bestB = b;
@@ -188,7 +192,7 @@ function detectCrossingField(points: Vector3[], options: DeveloperRibbonOptions,
 }
 
 function paintCrossingWindow(field: CrossingField[], center: number, sign: number, strength: number, samples: number) {
-  const radius = Math.max(8, Math.floor(samples * 0.022));
+  const radius = Math.max(12, Math.floor(samples * 0.04));
   for (let offset = -radius; offset <= radius; offset++) {
     const index = (center + offset + samples) % samples;
     const u = Math.abs(offset) / radius;
