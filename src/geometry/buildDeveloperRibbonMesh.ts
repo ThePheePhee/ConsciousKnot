@@ -42,9 +42,9 @@ export function buildDeveloperRibbonMesh(options: DeveloperRibbonOptions) {
     const target = devKnotPoint(targetKnot, t + targetPhase);
     const xyz = source.clone().lerp(target, smootherstep(stage.morph));
     const local = localizedLift(t, segmentIndex, options.simultaneousUncrossings);
+    const passage = stage.fourthDimensionWindow * local.window;
     const lift = options.crossingMode === 'projected intersections' || !changesKnotType ? 0 : options.liftAmplitude * stage.fourthDimensionWindow * local.signedLift;
-    const hidden = options.crossingMode === 'hidden 4D passage' && changesKnotType ? options.hideDuringUncrossing * stage.fourthDimensionWindow * local.window : 0;
-    visibility.push(Math.max(0.18, 1 - hidden));
+    visibility.push(hiddenPassageVisibility(options, changesKnotType, passage));
     points.push(project4Dto3D(new Vector4(xyz.x, xyz.y, xyz.z, lift), options.projectionDistance4D));
   }
   const frames = buildFrames(points, 0);
@@ -61,6 +61,10 @@ export function buildDeveloperRibbonMesh(options: DeveloperRibbonOptions) {
 function smoothstep(x: number) {
   const t = Math.max(0, Math.min(1, x));
   return t * t * (3 - 2 * t);
+}
+
+function smoothRange(edge0: number, edge1: number, x: number) {
+  return smoothstep((x - edge0) / Math.max(0.0001, edge1 - edge0));
 }
 
 function smootherstep(x: number) {
@@ -80,6 +84,13 @@ function stagedProgress(segmentT: number, segmentIndex: number, options: Develop
     morph,
     fourthDimensionWindow,
   };
+}
+
+function hiddenPassageVisibility(options: DeveloperRibbonOptions, changesKnotType: boolean, passage: number) {
+  if (options.crossingMode !== 'hidden 4D passage' || !changesKnotType) return 1;
+  const userNarrowing = options.hideDuringUncrossing * passage;
+  const hardOcclusion = smoothRange(0.14, 0.36, passage);
+  return Math.max(0, 1 - Math.max(userNarrowing, hardOcclusion));
 }
 
 function localizedLift(t: number, segmentIndex: number, simultaneousUncrossings: number) {
@@ -156,6 +167,9 @@ function buildVariableRibbonMesh(frames: ReturnType<typeof buildFrames>, visibil
 
   for (let i = 0; i < n; i++) {
     const ni = (i + 1) % n;
+    const visibleA = (visibility[i] ?? 1) > 0.035;
+    const visibleB = (visibility[ni] ?? 1) > 0.035;
+    if (!visibleA || !visibleB) continue;
     for (let j = 0; j < m - 1; j++) {
       const a = i * m + j;
       const b = ni * m + j;
