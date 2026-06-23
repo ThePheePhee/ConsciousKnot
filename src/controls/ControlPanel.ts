@@ -44,6 +44,9 @@ export function createControlPanel(params: Params, onChange: () => void) {
   withHelp(shellDeveloper.add(params, 'devShellThickness', 0.12, 0.7, 0.005).name('shell depth').onChange(onChange), 'Available radial depth for over/under weaving inside S2 x I.');
   withHelp(shellDeveloper.add(params, 'devLiftAmplitude', 0, 2.4, 0.01).name('4D lift').onChange(onChange), 'Diagnostic W lift for compact crossing-change neighborhoods during shell-diagram transitions.');
   withHelp(shellDeveloper.add(params, 'devShowWPassage').name('show W passage').onChange(onChange), 'When enabled, the compact W neighborhoods turn red and fade with W depth. Stable shell states should not show red.');
+  withHelp(shellDeveloper.add(params, 'devSelfAvoidanceStrength', 0, 1, 0.01).name('avoid strength').onChange(onChange), 'Strength of the constrained shell solver. It alternates elastic relaxation toward a lower-energy symmetric curve with tube-thickness separation for visible 3D ribbon branches.');
+  withHelp(shellDeveloper.add(params, 'devSelfAvoidanceIterations', 0, 12, 1).name('avoid passes').onFinishChange(onChange), 'Number of relaxation/separation passes. Higher values better remove tight contacts in dense shell weaves, at greater rebuild cost.');
+  withHelp(shellDeveloper.add(params, 'devTubeClearance', 1.2, 6.0, 0.05).name('tube clearance').onChange(onChange), 'Minimum centerline clearance in ribbon-width units for visible 3D branches. W-active crossing neighborhoods are exempt while they are outside ordinary 3-space.');
 
   const legacyDeveloper = gui.addFolder('Legacy Curve Developer');
   withHelp(legacyDeveloper.add(params, 'devTrajectorySize', 1, 4, 1).name('trajectory knots').onChange(onChange), 'How many knots are used in the legacy developer-mode path. A value of 2 means knot 1 goes directly to knot 2; higher values include the next selected knots as intermediate embeddings.');

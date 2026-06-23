@@ -85,33 +85,52 @@ function resolveShellEmbedding(samples: ShellSample[], options: SphericalWeaveOp
   const radius = Math.max(0.2, options.shellRadius);
   const thickness = Math.max(options.width * 3.0, options.shellThickness);
   const limit = thickness * 0.48;
-  const iterations = Math.max(5, Math.round(options.selfAvoidanceIterations));
-  const strength = Math.max(0.55, Math.min(1, options.selfAvoidanceStrength));
-  const clearance = Math.max(options.width * Math.max(2.35, options.tubeClearance), options.width + 0.04);
+  const iterations = Math.max(6, Math.round(options.selfAvoidanceIterations) + 2);
+  const strength = clamp(options.selfAvoidanceStrength, 0, 1);
+  if (strength <= 0 || iterations <= 0) return;
+
+  const clearance = Math.max(options.width * Math.max(3.45, options.tubeClearance * 1.08), options.width + 0.075);
   const guard = Math.max(12, Math.floor(n * 0.024));
 
   for (let pass = 0; pass < iterations; pass++) {
-    const positions = shellPositions(samples, radius);
-    const tangentPushes = Array.from({ length: n }, () => new Vector3());
-    const heightPushes = new Float32Array(n);
-    const weights = new Float32Array(n);
-
-    accumulatePointSeparation(samples, positions, tangentPushes, heightPushes, weights, clearance, guard, strength);
-    if (pass < 2) accumulateSegmentSeparation(samples, positions, tangentPushes, heightPushes, weights, clearance, guard, strength);
-
-    for (let i = 0; i < n; i++) {
-      if (weights[i] <= 0) continue;
-      const inv = 1 / weights[i];
-      const tangent = tangentPushes[i].multiplyScalar(inv / Math.max(0.4, radius + samples[i].height));
-      samples[i].direction.add(tangent.multiplyScalar(0.62)).normalize();
-      samples[i].height = clamp(samples[i].height + heightPushes[i] * inv * 0.82, -limit, limit);
-    }
-
+    applySeparationPass(samples, radius, clearance, guard, strength, true, limit);
     smoothShell(samples, 0.045 * strength, limit);
     relaxCurveEnergy(samples, radius, limit, 0.055 * strength);
+    applySeparationPass(samples, radius, clearance, guard, strength * 0.86, pass < 4, limit);
   }
 
-  for (let pass = 0; pass < 3; pass++) relaxCurveEnergy(samples, radius, limit, 0.04 * strength);
+  for (let pass = 0; pass < 5; pass++) {
+    relaxCurveEnergy(samples, radius, limit, 0.028 * strength);
+    smoothShell(samples, 0.018 * strength, limit);
+    applySeparationPass(samples, radius, clearance, guard, strength * (0.95 + pass * 0.08), true, limit);
+  }
+}
+
+function applySeparationPass(
+  samples: ShellSample[],
+  radius: number,
+  clearance: number,
+  guard: number,
+  strength: number,
+  includeSegments: boolean,
+  heightLimit: number,
+) {
+  const n = samples.length;
+  const positions = shellPositions(samples, radius);
+  const tangentPushes = Array.from({ length: n }, () => new Vector3());
+  const heightPushes = new Float32Array(n);
+  const weights = new Float32Array(n);
+
+  accumulatePointSeparation(samples, positions, tangentPushes, heightPushes, weights, clearance, guard, strength);
+  if (includeSegments) accumulateSegmentSeparation(samples, positions, tangentPushes, heightPushes, weights, clearance, guard, strength);
+
+  for (let i = 0; i < n; i++) {
+    if (weights[i] <= 0) continue;
+    const inv = 1 / weights[i];
+    const tangent = tangentPushes[i].multiplyScalar(inv / Math.max(0.4, radius + samples[i].height));
+    samples[i].direction.add(tangent.multiplyScalar(0.66)).normalize();
+    samples[i].height = clamp(samples[i].height + heightPushes[i] * inv * 0.86, -heightLimit, heightLimit);
+  }
 }
 
 function accumulatePointSeparation(
@@ -132,11 +151,13 @@ function accumulatePointSeparation(
     for (const j of nearby) {
       if (j <= i) continue;
       if (cyclicIndexDistance(i, j, n) < guard) continue;
+      const pairWeight = sampleCollisionWeight(samples[i]) * sampleCollisionWeight(samples[j]);
+      if (pairWeight <= 0.0001) continue;
       const delta = positions[i].clone().sub(positions[j]);
       const distanceSq = delta.lengthSq();
       if (distanceSq >= clearanceSq) continue;
       const distance = Math.sqrt(Math.max(0.0000001, distanceSq));
-      const amount = ((clearance - distance) / clearance) * clearance * strength;
+      const amount = ((clearance - distance) / clearance) * clearance * strength * pairWeight;
       const direction = stableDirection(delta, i, j);
       addShellPush(samples, tangentPushes, heightPushes, weights, i, direction, amount);
       addShellPush(samples, tangentPushes, heightPushes, weights, j, direction.clone().multiplyScalar(-1), amount);
@@ -161,17 +182,27 @@ function accumulateSegmentSeparation(
     for (let j = i + guard; j < n; j++) {
       const jNext = (j + 1) % n;
       if (cyclicIndexDistance(i, j, n) < guard || cyclicIndexDistance(iNext, j, n) < guard || cyclicIndexDistance(i, jNext, n) < guard) continue;
+      const pairWeight = segmentCollisionWeight(samples, i, iNext) * segmentCollisionWeight(samples, j, jNext);
+      if (pairWeight <= 0.0001) continue;
       const closest = closestSegmentParameters(positions[i], positions[iNext], positions[j], positions[jNext]);
       if (closest.distanceSq >= clearanceSq) continue;
       const distance = Math.sqrt(Math.max(0.0000001, closest.distanceSq));
-      const amount = ((clearance - distance) / clearance) * clearance * strength * 0.72;
+      const amount = ((clearance - distance) / clearance) * clearance * strength * 0.72 * pairWeight;
       const direction = stableDirection(closest.delta, i, j);
-      addShellPush(samples, tangentPushes, heightPushes, weights, i, direction, amount * (1 - closest.s));
-      addShellPush(samples, tangentPushes, heightPushes, weights, iNext, direction, amount * closest.s);
-      addShellPush(samples, tangentPushes, heightPushes, weights, j, direction.clone().multiplyScalar(-1), amount * (1 - closest.t));
-      addShellPush(samples, tangentPushes, heightPushes, weights, jNext, direction.clone().multiplyScalar(-1), amount * closest.t);
+      addShellPush(samples, tangentPushes, heightPushes, weights, i, direction, amount * (1 - closest.s), 1 - closest.s);
+      addShellPush(samples, tangentPushes, heightPushes, weights, iNext, direction, amount * closest.s, closest.s);
+      addShellPush(samples, tangentPushes, heightPushes, weights, j, direction.clone().multiplyScalar(-1), amount * (1 - closest.t), 1 - closest.t);
+      addShellPush(samples, tangentPushes, heightPushes, weights, jNext, direction.clone().multiplyScalar(-1), amount * closest.t, closest.t);
     }
   }
+}
+
+function sampleCollisionWeight(sample: ShellSample) {
+  return 1 - smootherstep(clamp01(sample.wWindow * 1.35));
+}
+
+function segmentCollisionWeight(samples: ShellSample[], a: number, b: number) {
+  return Math.min(sampleCollisionWeight(samples[a]), sampleCollisionWeight(samples[b]));
 }
 
 function buildSpatialGrid(positions: Vector3[], cellSize: number) {
@@ -213,6 +244,7 @@ function addShellPush(
   index: number,
   direction: Vector3,
   amount: number,
+  influence = 1,
 ) {
   if (amount <= 0) return;
   const radial = samples[index].direction;
@@ -220,7 +252,7 @@ function addShellPush(
   const tangentPart = direction.clone().sub(radial.clone().multiplyScalar(radialPart));
   tangentPushes[index].addScaledVector(tangentPart, amount);
   heightPushes[index] += radialPart * amount;
-  weights[index] += 1;
+  weights[index] += influence;
 }
 
 function smoothShell(samples: ShellSample[], amount: number, heightLimit: number) {
@@ -231,9 +263,10 @@ function smoothShell(samples: ShellSample[], amount: number, heightLimit: number
   for (let i = 0; i < n; i++) {
     const prev = samples[(i - 1 + n) % n];
     const next = samples[(i + 1) % n];
+    const localAmount = amount * (0.35 + 0.65 * sampleCollisionWeight(samples[i]));
     const averageDirection = prev.direction.clone().add(next.direction).normalize();
-    nextDirections.push(slerpUnit(samples[i].direction, averageDirection, amount));
-    nextHeights[i] = clamp(lerp(samples[i].height, (prev.height + next.height) * 0.5, amount * 1.4), -heightLimit, heightLimit);
+    nextDirections.push(slerpUnit(samples[i].direction, averageDirection, localAmount));
+    nextHeights[i] = clamp(lerp(samples[i].height, (prev.height + next.height) * 0.5, localAmount * 1.4), -heightLimit, heightLimit);
   }
   for (let i = 0; i < n; i++) {
     samples[i].direction.copy(nextDirections[i]);
@@ -267,9 +300,10 @@ function relaxCurveEnergy(samples: ShellSample[], radius: number, heightLimit: n
     const radial = samples[i].direction;
     const radialPart = force.dot(radial);
     const tangentPart = force.sub(radial.clone().multiplyScalar(radialPart));
-    directionUpdates.push(tangentPart.multiplyScalar(amount / Math.max(0.4, radius + samples[i].height)));
+    const localAmount = amount * (0.32 + 0.68 * sampleCollisionWeight(samples[i]));
+    directionUpdates.push(tangentPart.multiplyScalar(localAmount / Math.max(0.4, radius + samples[i].height)));
     const neighborHeight = (samples[prev].height + samples[next].height) * 0.5;
-    heightUpdates[i] = clamp(samples[i].height + (radialPart + (neighborHeight - samples[i].height) * 0.5) * amount, -heightLimit, heightLimit);
+    heightUpdates[i] = clamp(samples[i].height + (radialPart + (neighborHeight - samples[i].height) * 0.5) * localAmount, -heightLimit, heightLimit);
   }
 
   for (let i = 0; i < n; i++) {
