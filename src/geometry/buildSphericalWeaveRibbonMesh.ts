@@ -16,6 +16,7 @@ interface SphericalWeaveOptions {
   selfAvoidanceStrength: number;
   selfAvoidanceIterations: number;
   tubeClearance: number;
+  symmetryOrder: number;
 }
 
 interface ShellSample {
@@ -27,6 +28,12 @@ interface ShellSample {
 interface PatternSample {
   direction: Vector3;
   height: number;
+}
+
+interface SurfaceProbe {
+  index: number;
+  position: Vector3;
+  edgeWeight: number;
 }
 
 export function buildSphericalWeaveRibbonMesh(options: SphericalWeaveOptions) {
@@ -90,18 +97,22 @@ function resolveShellEmbedding(samples: ShellSample[], options: SphericalWeaveOp
   if (strength <= 0 || iterations <= 0) return;
 
   const clearance = Math.max(options.width * Math.max(3.45, options.tubeClearance * 1.08), options.width + 0.075);
+  const surfaceClearance = Math.max(options.width * 0.62, 0.035);
   const guard = Math.max(12, Math.floor(n * 0.024));
+  const symmetryOrder = Math.max(2, Math.round(options.symmetryOrder));
 
   for (let pass = 0; pass < iterations; pass++) {
     applySeparationPass(samples, radius, clearance, guard, strength, true, limit);
     smoothShell(samples, 0.045 * strength, limit);
     relaxCurveEnergy(samples, radius, limit, 0.055 * strength);
+    applyRibbonFootprintPass(samples, radius, options.width, surfaceClearance, guard, strength * 0.78, limit, symmetryOrder);
     applySeparationPass(samples, radius, clearance, guard, strength * 0.86, pass < 4, limit);
   }
 
   for (let pass = 0; pass < 5; pass++) {
     relaxCurveEnergy(samples, radius, limit, 0.028 * strength);
     smoothShell(samples, 0.018 * strength, limit);
+    applyRibbonFootprintPass(samples, radius, options.width, surfaceClearance, guard, strength * (0.9 + pass * 0.09), limit, symmetryOrder);
     applySeparationPass(samples, radius, clearance, guard, strength * (0.95 + pass * 0.08), true, limit);
   }
 }
@@ -189,12 +200,95 @@ function accumulateSegmentSeparation(
       const distance = Math.sqrt(Math.max(0.0000001, closest.distanceSq));
       const amount = ((clearance - distance) / clearance) * clearance * strength * 0.72 * pairWeight;
       const direction = stableDirection(closest.delta, i, j);
-      addShellPush(samples, tangentPushes, heightPushes, weights, i, direction, amount * (1 - closest.s), 1 - closest.s);
-      addShellPush(samples, tangentPushes, heightPushes, weights, iNext, direction, amount * closest.s, closest.s);
-      addShellPush(samples, tangentPushes, heightPushes, weights, j, direction.clone().multiplyScalar(-1), amount * (1 - closest.t), 1 - closest.t);
-      addShellPush(samples, tangentPushes, heightPushes, weights, jNext, direction.clone().multiplyScalar(-1), amount * closest.t, closest.t);
+      addShellPush(samples, tangentPushes, heightPushes, weights, i, direction, amount * (1 - closest.s));
+      addShellPush(samples, tangentPushes, heightPushes, weights, iNext, direction, amount * closest.s);
+      addShellPush(samples, tangentPushes, heightPushes, weights, j, direction.clone().multiplyScalar(-1), amount * (1 - closest.t));
+      addShellPush(samples, tangentPushes, heightPushes, weights, jNext, direction.clone().multiplyScalar(-1), amount * closest.t);
     }
   }
+}
+
+function applyRibbonFootprintPass(
+  samples: ShellSample[],
+  radius: number,
+  ribbonWidth: number,
+  clearance: number,
+  guard: number,
+  strength: number,
+  heightLimit: number,
+  symmetryOrder: number,
+) {
+  const n = samples.length;
+  const probes = buildSurfaceProbes(samples, radius, ribbonWidth);
+  const positions = probes.map((probe) => probe.position);
+  const grid = buildSpatialGrid(positions, Math.max(clearance * 1.7, ribbonWidth * 0.82));
+  const tangentPushes = Array.from({ length: n }, () => new Vector3());
+  const heightPushes = new Float32Array(n);
+  const weights = new Float32Array(n);
+  const clearanceSq = clearance * clearance;
+
+  for (let p = 0; p < probes.length; p++) {
+    const probe = probes[p];
+    const nearby = nearbySpatialIndices(grid, probe.position, Math.max(clearance * 1.7, ribbonWidth * 0.82));
+    for (const q of nearby) {
+      if (q <= p) continue;
+      const other = probes[q];
+      if (cyclicIndexDistance(probe.index, other.index, n) < guard) continue;
+      const pairWeight = sampleCollisionWeight(samples[probe.index]) * sampleCollisionWeight(samples[other.index]);
+      if (pairWeight <= 0.0001) continue;
+
+      const delta = probe.position.clone().sub(other.position);
+      const distanceSq = delta.lengthSq();
+      if (distanceSq >= clearanceSq) continue;
+      const distance = Math.sqrt(Math.max(0.0000001, distanceSq));
+      const overlap = (clearance - distance) / clearance;
+      const laneWeight = Math.max(probe.edgeWeight, other.edgeWeight);
+      const amount = overlap * overlap * clearance * strength * pairWeight * laneWeight;
+      if (amount <= 0) continue;
+
+      const separation = stableDirection(delta, probe.index, other.index);
+      const curl = symmetricCurlDirection(samples[probe.index].direction, separation, probe.index, symmetryOrder);
+      const response = separation.clone().multiplyScalar(0.74).addScaledVector(curl, 0.26 * overlap).normalize();
+      addShellPush(samples, tangentPushes, heightPushes, weights, probe.index, response, amount);
+      addShellPush(samples, tangentPushes, heightPushes, weights, other.index, response.clone().multiplyScalar(-1), amount);
+    }
+  }
+
+  for (let i = 0; i < n; i++) {
+    if (weights[i] <= 0) continue;
+    const inv = 1 / weights[i];
+    const tangent = tangentPushes[i].multiplyScalar(inv / Math.max(0.4, radius + samples[i].height));
+    samples[i].direction.add(tangent.multiplyScalar(0.72)).normalize();
+    samples[i].height = clamp(samples[i].height + heightPushes[i] * inv * 0.72, -heightLimit, heightLimit);
+  }
+}
+
+function buildSurfaceProbes(samples: ShellSample[], radius: number, ribbonWidth: number) {
+  const centerline = shellPositions(samples, radius);
+  const probes: SurfaceProbe[] = [];
+  const n = samples.length;
+  const lanes = [-0.96, -0.48, 0, 0.48, 0.96];
+
+  for (let i = 0; i < n; i++) {
+    const tangent = centerline[(i + 1) % n].clone().sub(centerline[(i - 1 + n) % n]).normalize();
+    const outward = samples[i].direction.clone().normalize();
+    let widthDirection = outward.clone().cross(tangent).normalize();
+    if (widthDirection.lengthSq() < 0.000001) widthDirection = projectedReferenceNormal(tangent);
+
+    for (const lane of lanes) {
+      const edge = Math.pow(Math.abs(lane), 2.8);
+      probes.push({
+        index: i,
+        edgeWeight: 0.58 + edge * 0.52,
+        position: centerline[i]
+          .clone()
+          .addScaledVector(widthDirection, ribbonWidth * lane)
+          .addScaledVector(outward, edge * ribbonWidth * 0.08),
+      });
+    }
+  }
+
+  return probes;
 }
 
 function sampleCollisionWeight(sample: ShellSample) {
@@ -244,7 +338,6 @@ function addShellPush(
   index: number,
   direction: Vector3,
   amount: number,
-  influence = 1,
 ) {
   if (amount <= 0) return;
   const radial = samples[index].direction;
@@ -252,7 +345,7 @@ function addShellPush(
   const tangentPart = direction.clone().sub(radial.clone().multiplyScalar(radialPart));
   tangentPushes[index].addScaledVector(tangentPart, amount);
   heightPushes[index] += radialPart * amount;
-  weights[index] += influence;
+  weights[index] += 1;
 }
 
 function smoothShell(samples: ShellSample[], amount: number, heightLimit: number) {
@@ -488,6 +581,15 @@ function stableDirection(delta: Vector3, i: number, j: number) {
   const seed = Math.sin((i + 1) * 12.9898 + (j + 1) * 78.233) * 43758.5453;
   const angle = (seed - Math.floor(seed)) * Math.PI * 2;
   return new Vector3(Math.cos(angle), Math.sin(angle), Math.sin(angle * 1.7)).normalize();
+}
+
+function symmetricCurlDirection(radial: Vector3, separation: Vector3, index: number, symmetryOrder: number) {
+  let curl = radial.clone().cross(separation);
+  if (curl.lengthSq() < 0.000001) curl = projectedReferenceNormal(radial);
+  curl.normalize();
+  const azimuth = Math.atan2(radial.y, radial.x);
+  const handedness = Math.sin(azimuth * symmetryOrder + index * 0.38196601125) >= 0 ? 1 : -1;
+  return curl.multiplyScalar(handedness);
 }
 
 function projectedReferenceNormal(tangent: Vector3) {
