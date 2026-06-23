@@ -1,6 +1,6 @@
 import { BufferAttribute, BufferGeometry, Vector3 } from 'three';
 import type { ExactSymmetryGroup, ExactTransitionMode, ExactWeavePattern, RibbonFrame } from '../math/types';
-import { exactGroupOrder, mirrorDihedral, rotateY, rotateZ, TAU } from './groups';
+import { exactGroupOrder, TAU } from './groups';
 import { exactWeaveSpec, type ExactWeaveMotif, type ExactWeaveSpec } from './patterns';
 
 interface ExactSymmetricWeaveOptions {
@@ -36,6 +36,18 @@ interface ExactStrip {
   samples: ExactSample[];
 }
 
+interface CollisionParticle {
+  strip: ExactStrip;
+  stripIndex: number;
+  sample: ExactSample;
+  sampleIndex: number;
+  sampleCount: number;
+  lane: number;
+  position: Vector3;
+  contactRadius: number;
+  collisionWeight: number;
+}
+
 export function buildExactSymmetricWeaveMesh(options: ExactSymmetricWeaveOptions) {
   const order = exactGroupOrder(options.group);
   const source = exactWeaveSpec(options.sourcePattern);
@@ -43,6 +55,7 @@ export function buildExactSymmetricWeaveMesh(options: ExactSymmetricWeaveOptions
   const motifCount = Math.max(source.motifs.length, target.motifs.length);
   const strips = buildStripKeys(order, motifCount).map((key) => buildStrip(key, source, target, options, order, motifCount));
   relaxExactStrips(strips, options, Math.max(0, Math.round(options.relaxationSteps)));
+  avoidExactSelfIntersections(strips, options, order, motifCount);
   return buildRibbonGeometry(strips, Math.max(0.2, options.shellRadius), Math.max(0.01, options.width), Math.max(4, Math.round(options.crossSamples)), options.showWPassage);
 }
 
@@ -65,7 +78,7 @@ function buildStrip(
   motifCount: number,
 ): ExactStrip {
   const stripCount = motifCount * order * 2;
-  const samplesPerStrip = clamp(Math.round(options.samples / Math.sqrt(stripCount)), 56, 156);
+  const samplesPerStrip = clamp(Math.round(options.samples / Math.sqrt(stripCount) * 0.72), 42, 108);
   const progress = clamp01(options.progress);
   const blend = smootherstep(progress);
   const sourceMotif = source.motifs[key.motif % source.motifs.length];
@@ -74,11 +87,11 @@ function buildStrip(
 
   for (let i = 0; i < samplesPerStrip; i++) {
     const u = i / samplesPerStrip;
-    const sourceDirection = motifDirection(sourceMotif, key, u, order);
-    const targetDirection = motifDirection(targetMotif, key, u, order);
+    const sourceDirection = motifDirection(sourceMotif, key, u, order, motifCount);
+    const targetDirection = motifDirection(targetMotif, key, u, order, motifCount);
     const direction = slerpUnit(sourceDirection, targetDirection, blend);
-    const sourceHeight = motifHeight(source, sourceMotif, key, u, options.shellThickness, order);
-    const targetHeight = motifHeight(target, targetMotif, key, u, options.shellThickness, order);
+    const sourceHeight = motifHeight(source, sourceMotif, key, u, options.shellThickness, order, motifCount);
+    const targetHeight = motifHeight(target, targetMotif, key, u, options.shellThickness, order, motifCount);
     samples.push({
       direction,
       height: lerp(sourceHeight, targetHeight, blend),
@@ -89,36 +102,40 @@ function buildStrip(
   return { key, samples };
 }
 
-function motifDirection(motif: ExactWeaveMotif, key: StripKey, u: number, order: number) {
+function motifDirection(motif: ExactWeaveMotif, key: StripKey, u: number, order: number, motifCount: number) {
   const theta = u * TAU;
+  const wedge = TAU / order;
+  const lane = familyLane(key, motifCount);
+  const centerAzimuth = key.copy * wedge + key.mirror * (motif.roll + lane * wedge * 0.18);
+  const polar = clamp(motif.tilt + lane * 0.08, 0.3, Math.PI - 0.3);
+  const center = sphericalDirection(centerAzimuth, polar);
+  const east = new Vector3(-Math.sin(centerAzimuth), Math.cos(centerAzimuth), 0).normalize();
+  const south = new Vector3(
+    Math.cos(centerAzimuth) * Math.cos(polar),
+    Math.sin(centerAzimuth) * Math.cos(polar),
+    -Math.sin(polar),
+  ).normalize();
   const handed = motif.handedness * key.mirror;
   const phase = key.mirror > 0 ? motif.phase : -motif.phase;
-  const azimuth = theta
-    + handed * motif.skew * Math.sin(motif.waves * theta + phase)
-    + handed * motif.petal * Math.sin((motif.waves + 1) * theta - phase * 0.6);
-  const z = clamp(
-    motif.amplitude * Math.sin(motif.waves * theta + phase)
-      + motif.petal * Math.sin(motif.waves * 2 * theta + phase * 0.5),
-    -0.86,
-    0.86,
-  );
-  const xy = Math.sqrt(Math.max(0.0001, 1 - z * z));
-  let direction = new Vector3(Math.cos(azimuth) * xy, Math.sin(azimuth) * xy, z);
-  direction = rotateY(direction, motif.tilt);
-  direction = rotateZ(direction, motif.roll);
-  if (key.mirror < 0) direction = mirrorDihedral(direction);
-  direction = rotateZ(direction, key.copy * TAU / order);
+  const lobe = 1 + motif.petal * Math.sin(motif.waves * theta + phase);
+  const major = motif.amplitude * lobe;
+  const minor = motif.skew * (0.9 + 0.16 * Math.cos((motif.waves + 1) * theta - phase));
+  const offset = east
+    .clone()
+    .multiplyScalar(major * Math.cos(theta))
+    .addScaledVector(south, minor * Math.sin(theta) + handed * motif.petal * 0.18 * Math.sin(2 * theta + phase));
+  const direction = center.clone().add(offset);
   return direction.normalize();
 }
 
-function motifHeight(spec: ExactWeaveSpec, motif: ExactWeaveMotif, key: StripKey, u: number, shellThickness: number, order: number) {
+function motifHeight(spec: ExactWeaveSpec, motif: ExactWeaveMotif, key: StripKey, u: number, shellThickness: number, order: number, motifCount: number) {
   const theta = u * TAU;
   const orbitPhase = key.copy * TAU / order;
   const mirrorPhase = key.mirror > 0 ? 0 : Math.PI * 0.5;
-  const layer = 0.36 * Math.sin(spec.layerFrequency * theta + motif.layerPhase + mirrorPhase + spec.orbitLayerCoupling * orbitPhase)
-    + 0.16 * Math.cos((spec.layerFrequency + motif.waves) * theta - orbitPhase + motif.phase);
-  const familyBias = motif.layerBias + key.mirror * 0.035;
-  return clamp((layer * spec.layerDepth + familyBias) * shellThickness, -shellThickness * 0.47, shellThickness * 0.47);
+  const layer = 0.16 * Math.sin(spec.layerFrequency * theta + motif.layerPhase + mirrorPhase + spec.orbitLayerCoupling * orbitPhase)
+    + 0.08 * Math.cos((spec.layerFrequency + motif.waves) * theta - orbitPhase + motif.phase);
+  const familyBias = familyLane(key, motifCount) * 0.74 + motif.layerBias * 0.24;
+  return clamp((layer * spec.layerDepth + familyBias) * shellThickness, -shellThickness * 0.68, shellThickness * 0.68);
 }
 
 function scheduledOrbitPassage(
@@ -153,6 +170,104 @@ function scheduledOrbitPassage(
   return spatial * compactEventWWindow(localTime);
 }
 
+function avoidExactSelfIntersections(strips: ExactStrip[], options: ExactSymmetricWeaveOptions, order: number, motifCount: number) {
+  const radius = Math.max(0.2, options.shellRadius);
+  const heightLimit = Math.max(options.shellThickness * 0.74, options.width * 3.8);
+  const maxContact = Math.max(options.width * 2.95, 0.12);
+  const passes = Math.max(2, Math.min(4, Math.round(options.relaxationSteps * 0.55) + 2));
+
+  for (let pass = 0; pass < passes; pass++) {
+    const particles = buildRibbonCollisionParticles(strips, radius, options.width);
+    const grid = buildSpatialGrid(particles.map((particle) => particle.position), maxContact);
+    const heightPushes = strips.map((strip) => new Float32Array(strip.samples.length));
+    const weights = strips.map((strip) => new Float32Array(strip.samples.length));
+
+    for (let i = 0; i < particles.length; i++) {
+      const particle = particles[i];
+      const nearby = nearbySpatialIndices(grid, particle.position, maxContact);
+      for (const j of nearby) {
+        if (j <= i) continue;
+        const other = particles[j];
+        if (particle.stripIndex === other.stripIndex && cyclicIndexDistance(particle.sampleIndex, other.sampleIndex, particle.sampleCount) < 8) continue;
+        const pairWeight = particle.collisionWeight * other.collisionWeight;
+        if (pairWeight <= 0.0001) continue;
+        const delta = particle.position.clone().sub(other.position);
+        const distanceSq = delta.lengthSq();
+        const contact = particle.contactRadius + other.contactRadius;
+        const contactSq = contact * contact;
+        if (distanceSq >= contactSq) continue;
+        const distance = Math.sqrt(Math.max(0.0000001, distanceSq));
+        const overlap = (contact - distance) / contact;
+        const heightDelta = particle.sample.height - other.sample.height;
+        const laneDelta = familyLane(particle.strip.key, motifCount) - familyLane(other.strip.key, motifCount);
+        const direction = Math.abs(heightDelta) > options.width * 0.25
+          ? Math.sign(heightDelta)
+          : laneDelta === 0
+          ? (stripRank(particle.strip.key, order) >= stripRank(other.strip.key, order) ? 1 : -1)
+          : Math.sign(laneDelta);
+        const amount = overlap * overlap * contact * pairWeight * (0.74 + pass * 0.1);
+        heightPushes[particle.stripIndex][particle.sampleIndex] += direction * amount;
+        heightPushes[other.stripIndex][other.sampleIndex] -= direction * amount;
+        weights[particle.stripIndex][particle.sampleIndex] += 1;
+        weights[other.stripIndex][other.sampleIndex] += 1;
+      }
+    }
+
+    for (let stripIndex = 0; stripIndex < strips.length; stripIndex++) {
+      const strip = strips[stripIndex];
+      for (let sampleIndex = 0; sampleIndex < strip.samples.length; sampleIndex++) {
+        const weight = weights[stripIndex][sampleIndex];
+        if (weight <= 0) continue;
+        const sample = strip.samples[sampleIndex];
+        sample.height = clamp(sample.height + heightPushes[stripIndex][sampleIndex] / weight, -heightLimit, heightLimit);
+      }
+    }
+  }
+}
+
+function buildRibbonCollisionParticles(strips: ExactStrip[], radius: number, width: number) {
+  const particles: CollisionParticle[] = [];
+  const lanes = [-0.92, 0, 0.92];
+
+  for (let stripIndex = 0; stripIndex < strips.length; stripIndex++) {
+    const strip = strips[stripIndex];
+    const centers = strip.samples.map((sample) => sample.direction.clone().multiplyScalar(radius + sample.height));
+    for (let sampleIndex = 0; sampleIndex < strip.samples.length; sampleIndex++) {
+      const sample = strip.samples[sampleIndex];
+      const collisionWeight = sampleCollisionWeight(sample);
+      if (collisionWeight <= 0.0001) continue;
+      const center = centers[sampleIndex];
+      const prev = centers[(sampleIndex - 1 + centers.length) % centers.length];
+      const next = centers[(sampleIndex + 1) % centers.length];
+      const tangent = next.clone().sub(prev).normalize();
+      const outward = sample.direction.clone().normalize();
+      let normal = outward.clone().cross(tangent).normalize();
+      if (normal.lengthSq() < 0.000001) normal = projectedReferenceNormal(tangent);
+
+      for (const lane of lanes) {
+        const edge = Math.pow(Math.abs(lane), 2.8);
+        const position = center
+          .clone()
+          .addScaledVector(normal, width * lane)
+          .addScaledVector(outward, edge * width * 0.08);
+        particles.push({
+          strip,
+          stripIndex,
+          sample,
+          sampleIndex,
+          sampleCount: strip.samples.length,
+          lane,
+          position,
+          contactRadius: lane === 0 ? width * 1.18 + 0.018 : width * 0.52 + 0.014,
+          collisionWeight: collisionWeight * (lane === 0 ? 1 : 0.86),
+        });
+      }
+    }
+  }
+
+  return particles;
+}
+
 function relaxExactStrips(strips: ExactStrip[], options: ExactSymmetricWeaveOptions, steps: number) {
   const heightLimit = Math.max(options.shellThickness * 0.47, options.width * 1.75);
   for (let step = 0; step < steps; step++) {
@@ -183,6 +298,21 @@ function clampStripToShellDepth(strip: ExactStrip, heightLimit: number) {
     sample.direction.normalize();
     sample.height = clamp(sample.height, -heightLimit, heightLimit);
   }
+}
+
+function sphericalDirection(azimuth: number, polar: number) {
+  const sinPolar = Math.sin(polar);
+  return new Vector3(Math.cos(azimuth) * sinPolar, Math.sin(azimuth) * sinPolar, Math.cos(polar));
+}
+
+function familyLane(key: StripKey, motifCount: number) {
+  const laneCount = Math.max(2, motifCount * 2);
+  const laneIndex = key.motif * 2 + (key.mirror < 0 ? 1 : 0);
+  return laneCount <= 1 ? 0 : laneIndex / (laneCount - 1) * 2 - 1;
+}
+
+function stripRank(key: StripKey, order: number) {
+  return (key.motif * 2 + (key.mirror < 0 ? 1 : 0)) * order + key.copy;
 }
 
 function buildRibbonGeometry(strips: ExactStrip[], radius: number, width: number, crossSamples: number, showWPassage: boolean) {
@@ -312,6 +442,46 @@ function compactEventWWindow(localTime: number) {
 function compactLocalBump(distance: number, radius: number) {
   if (distance >= radius) return 0;
   return smootherstep(1 - distance / radius);
+}
+
+function sampleCollisionWeight(sample: ExactSample) {
+  return 1 - smootherstep(clamp01(sample.wWindow * 1.35));
+}
+
+function buildSpatialGrid(positions: Vector3[], cellSize: number) {
+  const grid = new Map<string, number[]>();
+  for (let i = 0; i < positions.length; i++) {
+    const key = spatialKey(positions[i], cellSize);
+    const bucket = grid.get(key);
+    if (bucket) bucket.push(i);
+    else grid.set(key, [i]);
+  }
+  return grid;
+}
+
+function nearbySpatialIndices(grid: Map<string, number[]>, point: Vector3, cellSize: number) {
+  const cx = Math.floor(point.x / cellSize);
+  const cy = Math.floor(point.y / cellSize);
+  const cz = Math.floor(point.z / cellSize);
+  const indices: number[] = [];
+  for (let dx = -1; dx <= 1; dx++) {
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dz = -1; dz <= 1; dz++) {
+        const bucket = grid.get(`${cx + dx}:${cy + dy}:${cz + dz}`);
+        if (bucket) indices.push(...bucket);
+      }
+    }
+  }
+  return indices;
+}
+
+function spatialKey(point: Vector3, cellSize: number) {
+  return `${Math.floor(point.x / cellSize)}:${Math.floor(point.y / cellSize)}:${Math.floor(point.z / cellSize)}`;
+}
+
+function cyclicIndexDistance(a: number, b: number, samples: number) {
+  const d = Math.abs(a - b);
+  return Math.min(d, samples - d);
 }
 
 function cyclicUnitDistance(a: number, b: number) {
