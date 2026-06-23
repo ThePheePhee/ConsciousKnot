@@ -138,6 +138,9 @@ export interface Params {
   devSelfAvoidanceStrength: number;
   devSelfAvoidanceIterations: number;
   devTubeClearance: number;
+  devPhysicsMode: boolean;
+  devPhysicsSubsteps: number;
+  devPhysicsBend: number;
   devHideDuringUncrossing: number;
   devFourthDimensionDuty: number;
   devTwistEnabled: boolean;

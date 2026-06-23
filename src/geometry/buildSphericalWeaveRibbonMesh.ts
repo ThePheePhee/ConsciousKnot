@@ -17,6 +17,9 @@ interface SphericalWeaveOptions {
   selfAvoidanceIterations: number;
   tubeClearance: number;
   symmetryOrder: number;
+  physicsMode: boolean;
+  physicsSubsteps: number;
+  physicsBend: number;
 }
 
 interface ShellSample {
@@ -107,6 +110,11 @@ function resolveShellEmbedding(samples: ShellSample[], options: SphericalWeaveOp
   const guard = Math.max(12, Math.floor(n * 0.024));
   const symmetryOrder = Math.max(2, Math.round(options.symmetryOrder));
 
+  if (options.physicsMode) {
+    resolveShellEmbeddingPhysics(samples, options, radius, limit, clearance, surfaceClearance, guard, strength, symmetryOrder, widthStress);
+    return;
+  }
+
   for (let pass = 0; pass < iterations; pass++) {
     applySeparationPass(samples, radius, clearance, guard, strength, true, limit);
     smoothShell(samples, 0.045 * strength, limit);
@@ -126,6 +134,276 @@ function resolveShellEmbedding(samples: ShellSample[], options: SphericalWeaveOp
       applyRibbonFootprintPass(samples, radius, options.width, surfaceClearance, guard, strength * (0.88 + pass * 0.07 + footprint * 0.08), limit, symmetryOrder, widthStress);
     }
     applySeparationPass(samples, radius, clearance, guard, strength * (0.95 + pass * 0.08), true, limit);
+  }
+}
+
+function resolveShellEmbeddingPhysics(
+  samples: ShellSample[],
+  options: SphericalWeaveOptions,
+  radius: number,
+  heightLimit: number,
+  clearance: number,
+  surfaceClearance: number,
+  guard: number,
+  strength: number,
+  symmetryOrder: number,
+  widthStress: number,
+) {
+  const n = samples.length;
+  if (n < 4 || strength <= 0) return;
+
+  const positions = shellPositions(samples, radius);
+  const targets = positions.map((position) => position.clone());
+  const restLengths = positions.map((position, i) => position.distanceTo(positions[(i + 1) % n]));
+  const meanRestLength = restLengths.reduce((sum, value) => sum + value, 0) / Math.max(1, restLengths.length);
+  const substeps = Math.max(2, Math.round(options.physicsSubsteps + widthStress * 2));
+  const bendStiffness = clamp(options.physicsBend, 0, 1);
+  const stretchStiffness = 0.34 + strength * 0.28 + widthStress * 0.1;
+  const shellStiffness = 0.055 + strength * 0.045;
+  const collisionStrength = strength * (0.78 + widthStress * 0.24);
+
+  for (let step = 0; step < substeps; step++) {
+    satisfyStretchConstraints(positions, restLengths, stretchStiffness);
+    satisfyBendConstraints(positions, bendStiffness * (0.1 + widthStress * 0.08), meanRestLength);
+    satisfyShellAdherence(samples, positions, targets, radius, heightLimit, shellStiffness);
+    solvePhysicsCollisions(samples, positions, options.width, clearance, surfaceClearance, guard, collisionStrength, symmetryOrder, widthStress);
+    projectPositionsToShellBand(positions, radius, heightLimit);
+  }
+
+  writePositionsToSamples(samples, positions, radius, heightLimit);
+
+  const finishPasses = 2 + Math.round(widthStress * 2);
+  for (let pass = 0; pass < finishPasses; pass++) {
+    applyRibbonFootprintPass(samples, radius, options.width, surfaceClearance, guard, strength * (0.74 + pass * 0.1), heightLimit, symmetryOrder, widthStress);
+    applySeparationPass(samples, radius, clearance, guard, strength * (0.66 + pass * 0.08), true, heightLimit);
+    relaxCurveEnergy(samples, radius, heightLimit, 0.015 * strength * (1 - widthStress * 0.25));
+  }
+}
+
+function satisfyStretchConstraints(positions: Vector3[], restLengths: number[], stiffness: number) {
+  const n = positions.length;
+  const amount = clamp(stiffness, 0, 1) * 0.5;
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    const delta = positions[j].clone().sub(positions[i]);
+    const length = delta.length();
+    if (length < 0.000001) continue;
+    const correction = delta.multiplyScalar(((length - restLengths[i]) / length) * amount);
+    positions[i].add(correction);
+    positions[j].sub(correction);
+  }
+}
+
+function satisfyBendConstraints(positions: Vector3[], stiffness: number, meanRestLength: number) {
+  const n = positions.length;
+  const amount = clamp(stiffness, 0, 0.42);
+  if (amount <= 0) return;
+
+  const corrections = Array.from({ length: n }, () => new Vector3());
+  const weights = new Float32Array(n);
+  const maxMove = Math.max(0.004, meanRestLength * 0.72);
+  for (let i = 0; i < n; i++) {
+    const prev = positions[(i - 1 + n) % n];
+    const next = positions[(i + 1) % n];
+    const chordMid = prev.clone().add(next).multiplyScalar(0.5);
+    const correction = chordMid.sub(positions[i]).multiplyScalar(amount);
+    const length = correction.length();
+    if (length > maxMove) correction.multiplyScalar(maxMove / length);
+    corrections[i].add(correction);
+    weights[i] += 1;
+  }
+
+  for (let i = 0; i < n; i++) {
+    if (weights[i] > 0) positions[i].addScaledVector(corrections[i], 1 / weights[i]);
+  }
+}
+
+function satisfyShellAdherence(
+  samples: ShellSample[],
+  positions: Vector3[],
+  targets: Vector3[],
+  radius: number,
+  heightLimit: number,
+  stiffness: number,
+) {
+  const amount = clamp(stiffness, 0, 0.22);
+  if (amount <= 0) return;
+
+  for (let i = 0; i < positions.length; i++) {
+    const visibleWeight = 0.28 + sampleCollisionWeight(samples[i]) * 0.72;
+    positions[i].lerp(targets[i], amount * visibleWeight);
+    const length = Math.max(0.0001, positions[i].length());
+    const shellLength = clamp(length, radius - heightLimit, radius + heightLimit);
+    positions[i].multiplyScalar(lerp(1, shellLength / length, amount * 1.35));
+  }
+}
+
+function solvePhysicsCollisions(
+  samples: ShellSample[],
+  positions: Vector3[],
+  ribbonWidth: number,
+  clearance: number,
+  surfaceClearance: number,
+  guard: number,
+  strength: number,
+  symmetryOrder: number,
+  widthStress: number,
+) {
+  const n = positions.length;
+  const pushes = Array.from({ length: n }, () => new Vector3());
+  const weights = new Float32Array(n);
+
+  accumulatePhysicsPointCollisions(samples, positions, pushes, weights, clearance, guard, strength);
+  accumulatePhysicsSegmentCollisions(samples, positions, pushes, weights, clearance, guard, strength);
+  accumulatePhysicsSurfaceCollisions(samples, positions, pushes, weights, ribbonWidth, surfaceClearance, guard, strength, symmetryOrder, widthStress);
+
+  for (let i = 0; i < n; i++) {
+    if (weights[i] <= 0) continue;
+    const move = pushes[i].multiplyScalar(1 / weights[i]);
+    const length = move.length();
+    const maxMove = clearance * (0.42 + widthStress * 0.12);
+    if (length > maxMove) move.multiplyScalar(maxMove / length);
+    positions[i].add(move);
+  }
+}
+
+function accumulatePhysicsPointCollisions(
+  samples: ShellSample[],
+  positions: Vector3[],
+  pushes: Vector3[],
+  weights: Float32Array,
+  clearance: number,
+  guard: number,
+  strength: number,
+) {
+  const n = positions.length;
+  const clearanceSq = clearance * clearance;
+  const grid = buildSpatialGrid(positions, clearance);
+  for (let i = 0; i < n; i++) {
+    const nearby = nearbySpatialIndices(grid, positions[i], clearance);
+    for (const j of nearby) {
+      if (j <= i) continue;
+      if (cyclicIndexDistance(i, j, n) < guard) continue;
+      const pairWeight = sampleCollisionWeight(samples[i]) * sampleCollisionWeight(samples[j]);
+      if (pairWeight <= 0.0001) continue;
+
+      const delta = positions[i].clone().sub(positions[j]);
+      const distanceSq = delta.lengthSq();
+      if (distanceSq >= clearanceSq) continue;
+      const distance = Math.sqrt(Math.max(0.0000001, distanceSq));
+      const overlap = (clearance - distance) / clearance;
+      const amount = overlap * overlap * clearance * strength * 0.72 * pairWeight;
+      const direction = stableDirection(delta, i, j);
+      addPositionPush(pushes, weights, i, direction, amount);
+      addPositionPush(pushes, weights, j, direction.clone().multiplyScalar(-1), amount);
+    }
+  }
+}
+
+function accumulatePhysicsSegmentCollisions(
+  samples: ShellSample[],
+  positions: Vector3[],
+  pushes: Vector3[],
+  weights: Float32Array,
+  clearance: number,
+  guard: number,
+  strength: number,
+) {
+  const n = positions.length;
+  const clearanceSq = clearance * clearance;
+  for (let i = 0; i < n; i++) {
+    const iNext = (i + 1) % n;
+    for (let j = i + guard; j < n; j++) {
+      const jNext = (j + 1) % n;
+      if (cyclicIndexDistance(i, j, n) < guard || cyclicIndexDistance(iNext, j, n) < guard || cyclicIndexDistance(i, jNext, n) < guard) continue;
+      const pairWeight = segmentCollisionWeight(samples, i, iNext) * segmentCollisionWeight(samples, j, jNext);
+      if (pairWeight <= 0.0001) continue;
+
+      const closest = closestSegmentParameters(positions[i], positions[iNext], positions[j], positions[jNext]);
+      if (closest.distanceSq >= clearanceSq) continue;
+      const distance = Math.sqrt(Math.max(0.0000001, closest.distanceSq));
+      const overlap = (clearance - distance) / clearance;
+      const amount = overlap * overlap * clearance * strength * 0.58 * pairWeight;
+      const direction = stableDirection(closest.delta, i, j);
+      addPositionPush(pushes, weights, i, direction, amount * (1 - closest.s));
+      addPositionPush(pushes, weights, iNext, direction, amount * closest.s);
+      addPositionPush(pushes, weights, j, direction.clone().multiplyScalar(-1), amount * (1 - closest.t));
+      addPositionPush(pushes, weights, jNext, direction.clone().multiplyScalar(-1), amount * closest.t);
+    }
+  }
+}
+
+function accumulatePhysicsSurfaceCollisions(
+  samples: ShellSample[],
+  centerline: Vector3[],
+  pushes: Vector3[],
+  weights: Float32Array,
+  ribbonWidth: number,
+  clearance: number,
+  guard: number,
+  strength: number,
+  symmetryOrder: number,
+  widthStress: number,
+) {
+  const n = samples.length;
+  const probes = buildSurfaceProbesFromCenterline(samples, centerline, ribbonWidth, widthStress);
+  const positions = probes.map((probe) => probe.position);
+  const cellSize = Math.max(clearance * 1.9, ribbonWidth * (1.05 + widthStress * 0.58));
+  const grid = buildSpatialGrid(positions, cellSize);
+  const clearanceSq = clearance * clearance;
+
+  for (let p = 0; p < probes.length; p++) {
+    const probe = probes[p];
+    const nearby = nearbySpatialIndices(grid, probe.position, cellSize);
+    for (const q of nearby) {
+      if (q <= p) continue;
+      const other = probes[q];
+      if (cyclicIndexDistance(probe.index, other.index, n) < guard) continue;
+      const pairWeight = sampleCollisionWeight(samples[probe.index]) * sampleCollisionWeight(samples[other.index]);
+      if (pairWeight <= 0.0001) continue;
+
+      const delta = probe.position.clone().sub(other.position);
+      const distanceSq = delta.lengthSq();
+      if (distanceSq >= clearanceSq) continue;
+      const distance = Math.sqrt(Math.max(0.0000001, distanceSq));
+      const overlap = (clearance - distance) / clearance;
+      const laneWeight = Math.max(probe.edgeWeight, other.edgeWeight);
+      const amount = overlap * overlap * clearance * strength * laneWeight * pairWeight * (0.92 + widthStress * 0.75);
+      const separation = stableDirection(delta, probe.index, other.index);
+      const radial = centerline[probe.index].clone().normalize();
+      const curl = symmetricCurlDirection(radial, separation, probe.index, symmetryOrder);
+      const response = separation
+        .clone()
+        .multiplyScalar(0.72 - widthStress * 0.08)
+        .addScaledVector(curl, (0.28 + widthStress * 0.22) * overlap)
+        .normalize();
+      addPositionPush(pushes, weights, probe.index, response, amount);
+      addPositionPush(pushes, weights, other.index, response.clone().multiplyScalar(-1), amount);
+    }
+  }
+}
+
+function addPositionPush(pushes: Vector3[], weights: Float32Array, index: number, direction: Vector3, amount: number) {
+  if (amount <= 0) return;
+  pushes[index].addScaledVector(direction, amount);
+  weights[index] += 1;
+}
+
+function projectPositionsToShellBand(positions: Vector3[], radius: number, heightLimit: number) {
+  const minLength = Math.max(0.05, radius - heightLimit);
+  const maxLength = radius + heightLimit;
+  for (const position of positions) {
+    const length = Math.max(0.0001, position.length());
+    const clampedLength = clamp(length, minLength, maxLength);
+    position.multiplyScalar(clampedLength / length);
+  }
+}
+
+function writePositionsToSamples(samples: ShellSample[], positions: Vector3[], radius: number, heightLimit: number) {
+  for (let i = 0; i < samples.length; i++) {
+    const length = Math.max(0.0001, positions[i].length());
+    samples[i].direction.copy(positions[i]).multiplyScalar(1 / length).normalize();
+    samples[i].height = clamp(length - radius, -heightLimit, heightLimit);
   }
 }
 
@@ -283,6 +561,10 @@ function applyRibbonFootprintPass(
 
 function buildSurfaceProbes(samples: ShellSample[], radius: number, ribbonWidth: number, widthStress: number) {
   const centerline = shellPositions(samples, radius);
+  return buildSurfaceProbesFromCenterline(samples, centerline, ribbonWidth, widthStress);
+}
+
+function buildSurfaceProbesFromCenterline(samples: ShellSample[], centerline: Vector3[], ribbonWidth: number, widthStress: number) {
   const probes: SurfaceProbe[] = [];
   const n = samples.length;
   const lanes = surfaceProbeLanes(widthStress);

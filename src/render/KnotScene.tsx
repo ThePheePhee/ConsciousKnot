@@ -105,6 +105,9 @@ export function KnotScene() {
             selfAvoidanceIterations: params.devSelfAvoidanceIterations,
             tubeClearance: params.devTubeClearance,
             symmetryOrder: params.devSphereSymmetry,
+            physicsMode: params.devPhysicsMode,
+            physicsSubsteps: params.devPhysicsSubsteps,
+            physicsBend: params.devPhysicsBend,
           })
         : buildDeveloperRibbonMesh({
             knots: [params.devSourceKnot, params.devMidKnot, params.devTargetKnot, params.devFourthKnot].slice(0, Math.round(params.devTrajectorySize)),
