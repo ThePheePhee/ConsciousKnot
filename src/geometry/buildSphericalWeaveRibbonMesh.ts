@@ -35,19 +35,18 @@ export function buildSphericalWeaveRibbonMesh(options: SphericalWeaveOptions) {
   const target = samplePattern(options.targetPattern, samples, options.shellThickness);
   const progress = clamp01(options.progress);
   const changingPattern = options.sourcePattern !== options.targetPattern;
-  const crossingWindow = changingPattern && Math.abs(options.liftAmplitude) > 0.0001 ? compactTransitionWindow(progress) : 0;
-  const passageCount = Math.max(1, Math.abs(shellPatternCrossings(options.targetPattern) - shellPatternCrossings(options.sourcePattern)) || Math.min(4, Math.max(1, shellPatternCrossings(options.targetPattern))));
+  const eventCount = transitionEventCount(options.sourcePattern, options.targetPattern);
   const shellSamples: ShellSample[] = [];
 
   for (let i = 0; i < samples; i++) {
     const t = i / samples;
-    const direction = slerpUnit(source[i].direction, target[i].direction, progress);
-    const height = lerp(source[i].height, target[i].height, progress);
-    const localPassage = changingPattern ? localizedPassage(t, passageCount, progress) : 0;
+    const event = changingPattern ? scheduledCrossingTransition(t, eventCount, progress) : { blend: 0, wWindow: 0 };
+    const direction = slerpUnit(source[i].direction, target[i].direction, event.blend);
+    const height = lerp(source[i].height, target[i].height, event.blend);
     shellSamples.push({
       direction,
       height,
-      wWindow: crossingWindow * localPassage,
+      wWindow: Math.abs(options.liftAmplitude) > 0.0001 ? event.wWindow : 0,
     });
   }
 
@@ -366,21 +365,53 @@ function shellPositions(samples: ShellSample[], radius: number) {
   return samples.map((sample) => sample.direction.clone().multiplyScalar(radius + sample.height));
 }
 
-function localizedPassage(t: number, count: number, progress: number) {
-  let sum = 0;
-  const phase = progress * Math.PI * 2;
-  const radius = Math.min(0.045, Math.max(0.018, 0.42 / Math.max(1, count)));
-  for (let i = 0; i < count; i++) {
-    const center = ((i + 0.5) / count + 0.035 * Math.sin(phase + i)) % 1;
-    const d = cyclicUnitDistance(t, center);
-    sum += compactLocalBump(d, radius);
-  }
-  return clamp01(sum);
+function transitionEventCount(sourcePattern: DevShellPattern, targetPattern: DevShellPattern) {
+  if (sourcePattern === targetPattern) return 1;
+  const sourceCrossings = shellPatternCrossings(sourcePattern);
+  const targetCrossings = shellPatternCrossings(targetPattern);
+  return Math.max(1, Math.min(36, Math.max(sourceCrossings, targetCrossings, Math.abs(targetCrossings - sourceCrossings))));
 }
 
-function compactTransitionWindow(progress: number) {
-  const t = clamp01(progress);
-  return smoothRange(0.08, 0.22, t) * (1 - smoothRange(0.78, 0.92, t));
+function scheduledCrossingTransition(u: number, eventCount: number, progress: number) {
+  const phase = clamp01(progress);
+  if (phase <= 0) return { blend: 0, wWindow: 0 };
+  if (phase >= 1) return { blend: 1, wWindow: 0 };
+
+  const eventPosition = phase * eventCount;
+  const activeEvent = Math.min(eventCount - 1, Math.floor(eventPosition));
+  const localTime = eventPosition - activeEvent;
+  const blendRadius = Math.min(0.18, Math.max(0.52 / eventCount, 0.026));
+  const passageRadius = Math.min(blendRadius * 0.62, Math.max(0.012, 0.28 / eventCount));
+  let blend = 0;
+
+  for (let eventIndex = 0; eventIndex < eventCount; eventIndex++) {
+    const state = eventState(eventIndex, activeEvent, localTime);
+    if (state <= 0) continue;
+    const center = crossingEventCenter(eventIndex, eventCount);
+    const spatial = compactLocalBump(cyclicUnitDistance(u, center), blendRadius);
+    blend = Math.max(blend, state * spatial);
+  }
+
+  const activeCenter = crossingEventCenter(activeEvent, eventCount);
+  const activeSpatial = compactLocalBump(cyclicUnitDistance(u, activeCenter), passageRadius);
+  const wWindow = activeSpatial * compactEventWWindow(localTime);
+  return { blend: clamp01(blend), wWindow };
+}
+
+function eventState(eventIndex: number, activeEvent: number, localTime: number) {
+  if (eventIndex < activeEvent) return 1;
+  if (eventIndex > activeEvent) return 0;
+  return smootherstep(localTime);
+}
+
+function crossingEventCenter(eventIndex: number, eventCount: number) {
+  const goldenOffset = 0.38196601125;
+  return fract((eventIndex + 0.5) / eventCount + goldenOffset * (eventIndex % 3) / Math.max(3, eventCount));
+}
+
+function compactEventWWindow(localTime: number) {
+  const t = clamp01(localTime);
+  return smoothRange(0.43, 0.49, t) * (1 - smoothRange(0.51, 0.57, t));
 }
 
 function compactLocalBump(distance: number, radius: number) {
@@ -461,6 +492,10 @@ function smoothRange(edge0: number, edge1: number, x: number) {
 
 function lerp(a: number, b: number, t: number) {
   return a + (b - a) * t;
+}
+
+function fract(value: number) {
+  return value - Math.floor(value);
 }
 
 function clamp01(value: number) {
