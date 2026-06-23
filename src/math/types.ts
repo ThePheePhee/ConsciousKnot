@@ -17,7 +17,17 @@ export type TransitionPath = 'direct spherical' | 'three-step spherical' | 'loca
 export type DevCrossingMode = 'projected intersections' | 'hidden 4D passage';
 export type DevSphereMode = 'off' | 'contain ball' | 'radial shell' | 'symmetric shell';
 export type DevCoreMode = 'spherical shell weave' | 'legacy knot curve';
-export type DevShellPattern = 'unknot shell' | 'trefoil shell' | 'figure-eight shell' | 'pentafoil shell' | 'sixfold shell weave';
+export type DevShellPattern =
+  | 'unknot shell'
+  | 'trefoil shell'
+  | 'figure-eight shell'
+  | 'pentafoil shell'
+  | 'sixfold shell weave'
+  | 'loxodrome basket shell'
+  | 'temari flower shell'
+  | 'trihex kagome shell'
+  | 'goldberg geodesic shell'
+  | 'phyllotactic dense shell';
 export type DevKnotKind = string;
 
 export interface RibbonFrame {

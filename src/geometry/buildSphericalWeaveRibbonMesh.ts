@@ -34,8 +34,8 @@ export function buildSphericalWeaveRibbonMesh(options: SphericalWeaveOptions) {
   const source = samplePattern(options.sourcePattern, samples, options.shellThickness);
   const target = samplePattern(options.targetPattern, samples, options.shellThickness);
   const progress = clamp01(options.progress);
-  const crossingWindow = Math.sin(Math.PI * progress);
   const changingPattern = options.sourcePattern !== options.targetPattern;
+  const crossingWindow = changingPattern && Math.abs(options.liftAmplitude) > 0.0001 ? compactTransitionWindow(progress) : 0;
   const passageCount = Math.max(1, Math.abs(shellPatternCrossings(options.targetPattern) - shellPatternCrossings(options.sourcePattern)) || Math.min(4, Math.max(1, shellPatternCrossings(options.targetPattern))));
   const shellSamples: ShellSample[] = [];
 
@@ -53,10 +53,10 @@ export function buildSphericalWeaveRibbonMesh(options: SphericalWeaveOptions) {
 
   resolveShellEmbedding(shellSamples, options);
   const frames = buildShellFrames(shellSamples, options);
-  const wDepths = shellSamples.map((sample) => clamp01(sample.wWindow * Math.max(0, options.liftAmplitude) / 1.25));
-  const widthScale = wDepths.map((wDepth) => options.showWPassage ? 1 : Math.max(0.08, 1 - 0.88 * wDepth));
-  const wIntensity = wDepths.map((wDepth) => options.showWPassage && wDepth > 0.0001 ? 1 : 0);
-  const wAlpha = wDepths.map((wDepth) => options.showWPassage ? 1 - 0.86 * smootherstep(wDepth) : 1);
+  const wDepths = shellSamples.map((sample) => clamp01(sample.wWindow));
+  const widthScale = wDepths.map((wDepth) => options.showWPassage || wDepth <= 0.001 ? 1 : 0);
+  const wIntensity = wDepths.map((wDepth) => options.showWPassage && wDepth > 0.001 ? 1 : 0);
+  const wAlpha = wDepths.map((wDepth) => options.showWPassage && wDepth > 0.001 ? 0.12 + 0.34 * (1 - smootherstep(wDepth)) : 1);
   return buildShellRibbonMesh(frames, widthScale, wIntensity, wAlpha, options.width, options.crossSamples);
 }
 
@@ -109,7 +109,10 @@ function resolveShellEmbedding(samples: ShellSample[], options: SphericalWeaveOp
     }
 
     smoothShell(samples, 0.045 * strength, limit);
+    relaxCurveEnergy(samples, radius, limit, 0.055 * strength);
   }
+
+  for (let pass = 0; pass < 3; pass++) relaxCurveEnergy(samples, radius, limit, 0.04 * strength);
 }
 
 function accumulatePointSeparation(
@@ -239,6 +242,43 @@ function smoothShell(samples: ShellSample[], amount: number, heightLimit: number
   }
 }
 
+function relaxCurveEnergy(samples: ShellSample[], radius: number, heightLimit: number, amount: number) {
+  if (amount <= 0) return;
+  const n = samples.length;
+  const positions = shellPositions(samples, radius);
+  let meanLength = 0;
+  for (let i = 0; i < n; i++) meanLength += positions[i].distanceTo(positions[(i + 1) % n]);
+  meanLength /= n;
+
+  const directionUpdates: Vector3[] = [];
+  const heightUpdates = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const prev = (i - 1 + n) % n;
+    const next = (i + 1) % n;
+    const current = positions[i];
+    const toPrev = positions[prev].clone().sub(current);
+    const toNext = positions[next].clone().sub(current);
+    const prevLength = Math.max(0.0001, toPrev.length());
+    const nextLength = Math.max(0.0001, toNext.length());
+    const spring = toPrev
+      .multiplyScalar((prevLength - meanLength) / prevLength)
+      .add(toNext.multiplyScalar((nextLength - meanLength) / nextLength));
+    const curvature = positions[prev].clone().add(positions[next]).multiplyScalar(0.5).sub(current);
+    const force = spring.multiplyScalar(0.55).add(curvature.multiplyScalar(0.45));
+    const radial = samples[i].direction;
+    const radialPart = force.dot(radial);
+    const tangentPart = force.sub(radial.clone().multiplyScalar(radialPart));
+    directionUpdates.push(tangentPart.multiplyScalar(amount / Math.max(0.4, radius + samples[i].height)));
+    const neighborHeight = (samples[prev].height + samples[next].height) * 0.5;
+    heightUpdates[i] = clamp(samples[i].height + (radialPart + (neighborHeight - samples[i].height) * 0.5) * amount, -heightLimit, heightLimit);
+  }
+
+  for (let i = 0; i < n; i++) {
+    samples[i].direction.add(directionUpdates[i]).normalize();
+    samples[i].height = heightUpdates[i];
+  }
+}
+
 function buildShellFrames(samples: ShellSample[], options: SphericalWeaveOptions) {
   const positions = shellPositions(samples, Math.max(0.2, options.shellRadius));
   const n = samples.length;
@@ -329,12 +369,23 @@ function shellPositions(samples: ShellSample[], radius: number) {
 function localizedPassage(t: number, count: number, progress: number) {
   let sum = 0;
   const phase = progress * Math.PI * 2;
+  const radius = Math.min(0.045, Math.max(0.018, 0.42 / Math.max(1, count)));
   for (let i = 0; i < count; i++) {
     const center = ((i + 0.5) / count + 0.035 * Math.sin(phase + i)) % 1;
     const d = cyclicUnitDistance(t, center);
-    sum += Math.exp(-(d * d) / 0.0018);
+    sum += compactLocalBump(d, radius);
   }
   return clamp01(sum);
+}
+
+function compactTransitionWindow(progress: number) {
+  const t = clamp01(progress);
+  return smoothRange(0.08, 0.22, t) * (1 - smoothRange(0.78, 0.92, t));
+}
+
+function compactLocalBump(distance: number, radius: number) {
+  if (distance >= radius) return 0;
+  return smootherstep(1 - distance / radius);
 }
 
 function slerpUnit(a: Vector3, b: Vector3, t: number) {
@@ -402,6 +453,10 @@ function cyclicUnitDistance(a: number, b: number) {
 function smootherstep(x: number) {
   const t = clamp01(x);
   return t * t * t * (t * (t * 6 - 15) + 10);
+}
+
+function smoothRange(edge0: number, edge1: number, x: number) {
+  return smootherstep((x - edge0) / Math.max(0.0001, edge1 - edge0));
 }
 
 function lerp(a: number, b: number, t: number) {
