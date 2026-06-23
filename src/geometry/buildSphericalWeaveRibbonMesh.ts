@@ -90,14 +90,20 @@ function samplePattern(pattern: DevShellPattern, samples: number, shellThickness
 function resolveShellEmbedding(samples: ShellSample[], options: SphericalWeaveOptions) {
   const n = samples.length;
   const radius = Math.max(0.2, options.shellRadius);
-  const thickness = Math.max(options.width * 3.0, options.shellThickness);
+  const widthStress = clamp((options.width - 0.075) / 0.085, 0, 1);
+  const thickness = Math.max(options.width * lerp(3.2, 4.8, widthStress), options.shellThickness);
   const limit = thickness * 0.48;
-  const iterations = Math.max(6, Math.round(options.selfAvoidanceIterations) + 2);
+  const iterations = Math.max(6, Math.round(options.selfAvoidanceIterations) + 2 + Math.round(widthStress * 4));
   const strength = clamp(options.selfAvoidanceStrength, 0, 1);
   if (strength <= 0 || iterations <= 0) return;
 
-  const clearance = Math.max(options.width * Math.max(3.45, options.tubeClearance * 1.08), options.width + 0.075);
-  const surfaceClearance = Math.max(options.width * 0.62, 0.035);
+  const clearance = Math.max(
+    options.width * Math.max(3.55 + widthStress * 0.85, options.tubeClearance * (1.08 + widthStress * 0.14)),
+    options.width + 0.075 + widthStress * 0.04,
+  );
+  const surfaceClearance = Math.max(options.width * (0.78 + widthStress * 0.38), 0.04 + widthStress * 0.02);
+  const footprintPasses = 1 + Math.floor(widthStress * 2.05);
+  const footprintInterval = widthStress > 0.65 ? 1 : 2;
   const guard = Math.max(12, Math.floor(n * 0.024));
   const symmetryOrder = Math.max(2, Math.round(options.symmetryOrder));
 
@@ -105,14 +111,20 @@ function resolveShellEmbedding(samples: ShellSample[], options: SphericalWeaveOp
     applySeparationPass(samples, radius, clearance, guard, strength, true, limit);
     smoothShell(samples, 0.045 * strength, limit);
     relaxCurveEnergy(samples, radius, limit, 0.055 * strength);
-    applyRibbonFootprintPass(samples, radius, options.width, surfaceClearance, guard, strength * 0.78, limit, symmetryOrder);
+    if (pass % footprintInterval === 0 || pass >= iterations - 3) {
+      for (let footprint = 0; footprint < footprintPasses; footprint++) {
+        applyRibbonFootprintPass(samples, radius, options.width, surfaceClearance, guard, strength * (0.68 + footprint * 0.1), limit, symmetryOrder, widthStress);
+      }
+    }
     applySeparationPass(samples, radius, clearance, guard, strength * 0.86, pass < 4, limit);
   }
 
-  for (let pass = 0; pass < 5; pass++) {
+  for (let pass = 0; pass < 5 + Math.round(widthStress * 3); pass++) {
     relaxCurveEnergy(samples, radius, limit, 0.028 * strength);
     smoothShell(samples, 0.018 * strength, limit);
-    applyRibbonFootprintPass(samples, radius, options.width, surfaceClearance, guard, strength * (0.9 + pass * 0.09), limit, symmetryOrder);
+    for (let footprint = 0; footprint < footprintPasses + 1; footprint++) {
+      applyRibbonFootprintPass(samples, radius, options.width, surfaceClearance, guard, strength * (0.88 + pass * 0.07 + footprint * 0.08), limit, symmetryOrder, widthStress);
+    }
     applySeparationPass(samples, radius, clearance, guard, strength * (0.95 + pass * 0.08), true, limit);
   }
 }
@@ -217,11 +229,13 @@ function applyRibbonFootprintPass(
   strength: number,
   heightLimit: number,
   symmetryOrder: number,
+  widthStress: number,
 ) {
   const n = samples.length;
-  const probes = buildSurfaceProbes(samples, radius, ribbonWidth);
+  const probes = buildSurfaceProbes(samples, radius, ribbonWidth, widthStress);
   const positions = probes.map((probe) => probe.position);
-  const grid = buildSpatialGrid(positions, Math.max(clearance * 1.7, ribbonWidth * 0.82));
+  const cellSize = Math.max(clearance * 1.9, ribbonWidth * (0.95 + widthStress * 0.45));
+  const grid = buildSpatialGrid(positions, cellSize);
   const tangentPushes = Array.from({ length: n }, () => new Vector3());
   const heightPushes = new Float32Array(n);
   const weights = new Float32Array(n);
@@ -229,7 +243,7 @@ function applyRibbonFootprintPass(
 
   for (let p = 0; p < probes.length; p++) {
     const probe = probes[p];
-    const nearby = nearbySpatialIndices(grid, probe.position, Math.max(clearance * 1.7, ribbonWidth * 0.82));
+    const nearby = nearbySpatialIndices(grid, probe.position, cellSize);
     for (const q of nearby) {
       if (q <= p) continue;
       const other = probes[q];
@@ -243,12 +257,16 @@ function applyRibbonFootprintPass(
       const distance = Math.sqrt(Math.max(0.0000001, distanceSq));
       const overlap = (clearance - distance) / clearance;
       const laneWeight = Math.max(probe.edgeWeight, other.edgeWeight);
-      const amount = overlap * overlap * clearance * strength * pairWeight * laneWeight;
+      const amount = overlap * overlap * clearance * strength * pairWeight * laneWeight * (1 + widthStress * 0.72);
       if (amount <= 0) continue;
 
       const separation = stableDirection(delta, probe.index, other.index);
       const curl = symmetricCurlDirection(samples[probe.index].direction, separation, probe.index, symmetryOrder);
-      const response = separation.clone().multiplyScalar(0.74).addScaledVector(curl, 0.26 * overlap).normalize();
+      const response = separation
+        .clone()
+        .multiplyScalar(0.74 - widthStress * 0.12)
+        .addScaledVector(curl, (0.26 + widthStress * 0.2) * overlap)
+        .normalize();
       addShellPush(samples, tangentPushes, heightPushes, weights, probe.index, response, amount);
       addShellPush(samples, tangentPushes, heightPushes, weights, other.index, response.clone().multiplyScalar(-1), amount);
     }
@@ -258,16 +276,16 @@ function applyRibbonFootprintPass(
     if (weights[i] <= 0) continue;
     const inv = 1 / weights[i];
     const tangent = tangentPushes[i].multiplyScalar(inv / Math.max(0.4, radius + samples[i].height));
-    samples[i].direction.add(tangent.multiplyScalar(0.72)).normalize();
-    samples[i].height = clamp(samples[i].height + heightPushes[i] * inv * 0.72, -heightLimit, heightLimit);
+    samples[i].direction.add(tangent.multiplyScalar(0.72 + widthStress * 0.08)).normalize();
+    samples[i].height = clamp(samples[i].height + heightPushes[i] * inv * (0.72 + widthStress * 0.12), -heightLimit, heightLimit);
   }
 }
 
-function buildSurfaceProbes(samples: ShellSample[], radius: number, ribbonWidth: number) {
+function buildSurfaceProbes(samples: ShellSample[], radius: number, ribbonWidth: number, widthStress: number) {
   const centerline = shellPositions(samples, radius);
   const probes: SurfaceProbe[] = [];
   const n = samples.length;
-  const lanes = [-0.96, -0.48, 0, 0.48, 0.96];
+  const lanes = surfaceProbeLanes(widthStress);
 
   for (let i = 0; i < n; i++) {
     const tangent = centerline[(i + 1) % n].clone().sub(centerline[(i - 1 + n) % n]).normalize();
@@ -289,6 +307,12 @@ function buildSurfaceProbes(samples: ShellSample[], radius: number, ribbonWidth:
   }
 
   return probes;
+}
+
+function surfaceProbeLanes(widthStress: number) {
+  if (widthStress > 0.72) return [-0.98, -0.74, -0.5, -0.26, 0, 0.26, 0.5, 0.74, 0.98];
+  if (widthStress > 0.32) return [-0.98, -0.66, -0.34, 0, 0.34, 0.66, 0.98];
+  return [-0.96, -0.48, 0, 0.48, 0.96];
 }
 
 function sampleCollisionWeight(sample: ShellSample) {
