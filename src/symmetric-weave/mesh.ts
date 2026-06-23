@@ -1,6 +1,6 @@
 import { BufferAttribute, BufferGeometry, Vector3 } from 'three';
 import type { ExactSymmetryGroup, ExactTransitionMode, ExactWeavePattern, RibbonFrame } from '../math/types';
-import { exactGroupOrder, TAU } from './groups';
+import { exactGroupOrder, mirrorDihedral, rotateY, rotateZ, TAU } from './groups';
 import { exactWeaveSpec, type ExactWeaveMotif, type ExactWeaveSpec } from './patterns';
 
 interface ExactSymmetricWeaveOptions {
@@ -106,25 +106,30 @@ function motifDirection(motif: ExactWeaveMotif, key: StripKey, u: number, order:
   const theta = u * TAU;
   const wedge = TAU / order;
   const lane = familyLane(key, motifCount);
-  const centerAzimuth = key.copy * wedge + key.mirror * (motif.roll + lane * wedge * 0.18);
-  const polar = clamp(motif.tilt + lane * 0.08, 0.3, Math.PI - 0.3);
-  const center = sphericalDirection(centerAzimuth, polar);
-  const east = new Vector3(-Math.sin(centerAzimuth), Math.cos(centerAzimuth), 0).normalize();
-  const south = new Vector3(
-    Math.cos(centerAzimuth) * Math.cos(polar),
-    Math.sin(centerAzimuth) * Math.cos(polar),
-    -Math.sin(polar),
-  ).normalize();
   const handed = motif.handedness * key.mirror;
   const phase = key.mirror > 0 ? motif.phase : -motif.phase;
-  const lobe = 1 + motif.petal * Math.sin(motif.waves * theta + phase);
-  const major = motif.amplitude * lobe;
-  const minor = motif.skew * (0.9 + 0.16 * Math.cos((motif.waves + 1) * theta - phase));
-  const offset = east
-    .clone()
-    .multiplyScalar(major * Math.cos(theta))
-    .addScaledVector(south, minor * Math.sin(theta) + handed * motif.petal * 0.18 * Math.sin(2 * theta + phase));
-  const direction = center.clone().add(offset);
+
+  // The exact core is meant to live on S2 x I: each motif is a full spherical
+  // band before the finite symmetry copies are applied. Keeping the base curve
+  // global prevents the weave from degenerating into separated local orbit
+  // clusters.
+  const azimuth = theta
+    + handed * motif.skew * Math.sin(motif.waves * theta + phase)
+    + handed * motif.petal * Math.sin((motif.waves + 1) * theta - phase * 0.6)
+    + lane * wedge * 0.08;
+  const latitude = clamp(
+    motif.amplitude * Math.sin(motif.waves * theta + phase)
+      + motif.petal * 0.7 * Math.sin((motif.waves * 2 - 1) * theta + motif.layerPhase)
+      + lane * 0.055 * Math.sin(2 * theta - phase),
+    -0.86,
+    0.86,
+  );
+  const xy = Math.sqrt(Math.max(0.0001, 1 - latitude * latitude));
+  let direction = new Vector3(Math.cos(azimuth) * xy, Math.sin(azimuth) * xy, latitude);
+  direction = rotateY(direction, motif.tilt + lane * 0.06);
+  direction = rotateZ(direction, motif.roll + lane * wedge * 0.1);
+  if (key.mirror < 0) direction = mirrorDihedral(direction);
+  direction = rotateZ(direction, key.copy * wedge);
   return direction.normalize();
 }
 
@@ -298,11 +303,6 @@ function clampStripToShellDepth(strip: ExactStrip, heightLimit: number) {
     sample.direction.normalize();
     sample.height = clamp(sample.height, -heightLimit, heightLimit);
   }
-}
-
-function sphericalDirection(azimuth: number, polar: number) {
-  const sinPolar = Math.sin(polar);
-  return new Vector3(Math.cos(azimuth) * sinPolar, Math.sin(azimuth) * sinPolar, Math.cos(polar));
 }
 
 function familyLane(key: StripKey, motifCount: number) {
