@@ -3,12 +3,16 @@ import type { Params } from '../math/types';
 import { knotLabels } from '../math/knots';
 import { devKnotLabels } from '../math/devKnots';
 import { devShellPatternLabels } from '../math/sphericalWeaves';
+import { exactSymmetryGroupLabels, exactTransitionModeLabels, exactWeavePatternLabels } from '../symmetric-weave/patterns';
 
 export function createControlPanel(params: Params, onChange: () => void) {
   const gui = new GUI({ title: '4D Knot Rearrangement', width: 340 });
   const knots = Object.fromEntries(Object.entries(knotLabels).map(([key, value]) => [value, key]));
   const devKnots = Object.fromEntries(Object.entries(devKnotLabels).map(([key, value]) => [value, key]));
   const shellPatterns = Object.fromEntries(Object.entries(devShellPatternLabels).map(([key, value]) => [value, key]));
+  const exactGroups = Object.fromEntries(Object.entries(exactSymmetryGroupLabels).map(([key, value]) => [value, key]));
+  const exactPatterns = Object.fromEntries(Object.entries(exactWeavePatternLabels).map(([key, value]) => [value, key]));
+  const exactTransitions = Object.fromEntries(Object.entries(exactTransitionModeLabels).map(([key, value]) => [value, key]));
   const changed = () => {
     onChange();
     updateVisibility();
@@ -31,7 +35,22 @@ export function createControlPanel(params: Params, onChange: () => void) {
   topology.add(params, 'symmetryOrder', 3, 12, 1).name('symmetry').onChange(onChange);
 
   const developerRoot = gui.addFolder('Developer Mode');
-  withHelp(developerRoot.add(params, 'devCoreMode', ['spherical shell weave', 'legacy knot curve']).name('core').onChange(changed), 'Choose the mathematical core used in developer mode. Spherical shell weave builds a knot diagram natively in a thickened spherical shell. Legacy knot curve keeps the earlier Euclidean knot-curve inspection path.');
+  withHelp(developerRoot.add(params, 'devCoreMode', ['exact symmetric shell weave', 'spherical shell weave', 'legacy knot curve']).name('core').onChange(changed), 'Choose the mathematical core used in developer mode. Exact symmetric shell weave is the clean-room engine: finite symmetry first, declared crossing orbits, and no ad-hoc W excursions.');
+
+  const exactDeveloper = gui.addFolder('Exact Symmetric Developer');
+  withHelp(exactDeveloper.add(params, 'devExactSymmetryGroup', exactGroups).name('symmetry group').onChange(onChange), 'Finite dihedral group used to replicate every ribbon motif. The whole object is generated as group orbits, so symmetry is exact as a set.');
+  withHelp(exactDeveloper.add(params, 'devExactSource', exactPatterns).name('source weave').onChange(onChange), 'Starting symmetric weave family. These are clean-room orbit patterns, separate from the older parametric shell curves.');
+  withHelp(exactDeveloper.add(params, 'devExactTarget', exactPatterns).name('target weave').onChange(onChange), 'Target symmetric weave family for the transition.');
+  withHelp(exactDeveloper.add(params, 'devExactTransitionMode', exactTransitions).name('crossing schedule').onChange(onChange), 'How W passages are scheduled. Orbit crossings preserves exact symmetry by moving whole crossing orbits; local study intentionally breaks symmetry to inspect one neighborhood.');
+  withHelp(exactDeveloper.add(params, 'transitionProgress', 0, 1, 0.0005).name('scrub').onChange(onChange), 'Scrub the exact symmetric transition. W appears only in declared crossing-orbit windows, not from relaxation or ribbon twist.');
+  withHelp(exactDeveloper.add(params, 'devSampleCount', 240, 1200, 1).name('samples').onFinishChange(onChange), 'Approximate sample budget distributed across all replicated ribbon orbits.');
+  withHelp(exactDeveloper.add(params, 'devCrossSamples', 8, 32, 1).name('ribbon samples').onFinishChange(onChange), 'Samples across each ribbon width.');
+  withHelp(exactDeveloper.add(params, 'devRibbonWidth', 0.025, 0.16, 0.005).name('ribbon width').onChange(onChange), 'Physical ribbon width. This first exact engine is conservative: wider ribbons need larger shell depth and simpler groups.');
+  withHelp(exactDeveloper.add(params, 'devShellRadius', 0.9, 1.9, 0.005).name('shell radius').onChange(onChange), 'Mean radius of the symmetric spherical shell.');
+  withHelp(exactDeveloper.add(params, 'devShellThickness', 0.18, 0.72, 0.005).name('shell depth').onChange(onChange), 'Radial layer depth used for over-under separation in ordinary 3D space.');
+  withHelp(exactDeveloper.add(params, 'devLiftAmplitude', 0, 2.4, 0.01).name('4D lift').onChange(onChange), 'Enables compact W passages at declared crossing orbit events. Setting this to zero keeps all geometry in ordinary 3D.');
+  withHelp(exactDeveloper.add(params, 'devShowWPassage').name('show W passage').onChange(onChange), 'When enabled, W-active sections are red and ghostly. When disabled, W-active ribbon sections disappear so no projected 3D self-intersection is shown.');
+  withHelp(exactDeveloper.add(params, 'devExactRelaxationSteps', 0, 8, 1).name('relax steps').onFinishChange(onChange), 'Equivariant local smoothing applied inside each generated orbit. It smooths without creating W or changing crossing schedules.');
 
   const shellDeveloper = gui.addFolder('Spherical Shell Developer');
   withHelp(shellDeveloper.add(params, 'devShellSource', shellPatterns).name('source shell').onChange(onChange), 'Starting spherical-shell diagram. These are realized in S2 x I, using radial height for over/under information rather than flattening onto one sphere.');
@@ -115,6 +134,7 @@ export function createControlPanel(params: Params, onChange: () => void) {
   function updateVisibility() {
     for (const folder of productionFolders) folder.domElement.style.display = params.developerMode ? 'none' : '';
     developerRoot.domElement.style.display = params.developerMode ? '' : 'none';
+    exactDeveloper.domElement.style.display = params.developerMode && params.devCoreMode === 'exact symmetric shell weave' ? '' : 'none';
     shellDeveloper.domElement.style.display = params.developerMode && params.devCoreMode === 'spherical shell weave' ? '' : 'none';
     legacyDeveloper.domElement.style.display = params.developerMode && params.devCoreMode === 'legacy knot curve' ? '' : 'none';
   }

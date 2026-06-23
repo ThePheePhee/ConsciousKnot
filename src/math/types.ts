@@ -16,7 +16,10 @@ export type Mode = '3D Knot' | '4D Transition';
 export type TransitionPath = 'direct spherical' | 'three-step spherical' | 'local crossing';
 export type DevCrossingMode = 'projected intersections' | 'hidden 4D passage';
 export type DevSphereMode = 'off' | 'contain ball' | 'radial shell' | 'symmetric shell';
-export type DevCoreMode = 'spherical shell weave' | 'legacy knot curve';
+export type DevCoreMode = 'exact symmetric shell weave' | 'spherical shell weave' | 'legacy knot curve';
+export type ExactSymmetryGroup = 'D6' | 'D8' | 'D10';
+export type ExactWeavePattern = 'dihedral basket' | 'temari orbit' | 'trihex orbit' | 'geodesic flower';
+export type ExactTransitionMode = 'orbit crossings' | 'phase-staggered orbits' | 'local study';
 export type DevShellPattern =
   | 'unknot shell'
   | 'trefoil shell'
@@ -116,6 +119,11 @@ export interface Params {
   devTargetKnot: DevKnotKind;
   devFourthKnot: DevKnotKind;
   devCoreMode: DevCoreMode;
+  devExactSymmetryGroup: ExactSymmetryGroup;
+  devExactSource: ExactWeavePattern;
+  devExactTarget: ExactWeavePattern;
+  devExactTransitionMode: ExactTransitionMode;
+  devExactRelaxationSteps: number;
   devShellSource: DevShellPattern;
   devShellTarget: DevShellPattern;
   devShellRadius: number;

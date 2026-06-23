@@ -19,6 +19,7 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { buildParametricRibbonGeometry } from '../geometry/buildParametricRibbonGeometry';
 import { buildDeveloperRibbonMesh } from '../geometry/buildDeveloperRibbonMesh';
 import { buildSphericalWeaveRibbonMesh } from '../geometry/buildSphericalWeaveRibbonMesh';
+import { buildExactSymmetricWeaveMesh } from '../symmetric-weave/mesh';
 import { createControlPanel } from '../controls/ControlPanel';
 import { defaultParams } from '../controls/defaultParams';
 import { createClassicRibbonMaterial, createCore, createRibbonMaterial, knotKindId, transitionPathId } from './materials';
@@ -89,8 +90,24 @@ export function KnotScene() {
 
     const updateDeveloperGeometry = () => {
       const old = developerKnot.geometry;
-      developerKnot.geometry = params.devCoreMode === 'spherical shell weave'
-        ? buildSphericalWeaveRibbonMesh({
+      if (params.devCoreMode === 'exact symmetric shell weave') {
+        developerKnot.geometry = buildExactSymmetricWeaveMesh({
+          group: params.devExactSymmetryGroup,
+          sourcePattern: params.devExactSource,
+          targetPattern: params.devExactTarget,
+          transitionMode: params.devExactTransitionMode,
+          progress: params.transitionProgress,
+          samples: Math.round(params.devSampleCount),
+          crossSamples: Math.round(params.devCrossSamples),
+          width: params.devRibbonWidth,
+          shellRadius: params.devShellRadius,
+          shellThickness: params.devShellThickness,
+          liftAmplitude: params.devLiftAmplitude,
+          showWPassage: params.devShowWPassage,
+          relaxationSteps: params.devExactRelaxationSteps,
+        });
+      } else if (params.devCoreMode === 'spherical shell weave') {
+        developerKnot.geometry = buildSphericalWeaveRibbonMesh({
             sourcePattern: params.devShellSource,
             targetPattern: params.devShellTarget,
             progress: params.transitionProgress,
@@ -108,8 +125,9 @@ export function KnotScene() {
             physicsMode: params.devPhysicsMode,
             physicsSubsteps: params.devPhysicsSubsteps,
             physicsBend: params.devPhysicsBend,
-          })
-        : buildDeveloperRibbonMesh({
+          });
+      } else {
+        developerKnot.geometry = buildDeveloperRibbonMesh({
             knots: [params.devSourceKnot, params.devMidKnot, params.devTargetKnot, params.devFourthKnot].slice(0, Math.round(params.devTrajectorySize)),
             progress: params.transitionProgress,
             samples: Math.round(params.devSampleCount),
@@ -132,6 +150,7 @@ export function KnotScene() {
             fourthDimensionDuty: params.devFourthDimensionDuty,
             twistTurns: params.devTwistEnabled ? params.devTwistTurns : 0,
           });
+      }
       old.dispose();
       dirty = false;
     };
