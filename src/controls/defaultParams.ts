@@ -68,7 +68,7 @@ export const defaultParams: Params = {
   devExactSource: 'dihedral basket',
   devExactTarget: 'trihex orbit',
   devExactTransitionMode: 'orbit crossings',
-  devExactRelaxationSteps: 3,
+  devExactRelaxationSteps: 4,
   devShellSource: 'trihex kagome shell',
   devShellTarget: 'phyllotactic dense shell',
   devShellRadius: 1.34,

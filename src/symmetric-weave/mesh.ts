@@ -54,7 +54,8 @@ export function buildExactSymmetricWeaveMesh(options: ExactSymmetricWeaveOptions
   const target = exactWeaveSpec(options.targetPattern);
   const motifCount = Math.max(source.motifs.length, target.motifs.length);
   const strips = buildStripKeys(order, motifCount).map((key) => buildStrip(key, source, target, options, order, motifCount));
-  relaxExactStrips(strips, options, Math.max(0, Math.round(options.relaxationSteps)));
+  const relaxSteps = Math.max(0, Math.round(options.relaxationSteps));
+  relaxExactStrips(strips, options, relaxSteps);
   avoidExactSelfIntersections(strips, options, order, motifCount);
   return buildRibbonGeometry(strips, Math.max(0.2, options.shellRadius), Math.max(0.01, options.width), Math.max(4, Math.round(options.crossSamples)), options.showWPassage);
 }
@@ -175,17 +176,18 @@ function scheduledOrbitPassage(
   return spatial * compactEventWWindow(localTime);
 }
 
-function avoidExactSelfIntersections(strips: ExactStrip[], options: ExactSymmetricWeaveOptions, order: number, motifCount: number) {
+function avoidExactSelfIntersections(strips: ExactStrip[], options: ExactSymmetricWeaveOptions, order: number, motifCount: number, strength = 1) {
   const radius = Math.max(0.2, options.shellRadius);
   const heightLimit = Math.max(options.shellThickness * 0.74, options.width * 3.8);
-  const maxContact = Math.max(options.width * 2.95, 0.12);
-  const passes = Math.max(2, Math.min(4, Math.round(options.relaxationSteps * 0.55) + 2));
+  const maxContact = Math.max(options.width * 3.35, 0.14);
+  const passes = Math.max(1, Math.min(3, Math.round(options.relaxationSteps * 0.35) + 1));
 
   for (let pass = 0; pass < passes; pass++) {
     const particles = buildRibbonCollisionParticles(strips, radius, options.width);
     const grid = buildSpatialGrid(particles.map((particle) => particle.position), maxContact);
     const heightPushes = strips.map((strip) => new Float32Array(strip.samples.length));
     const weights = strips.map((strip) => new Float32Array(strip.samples.length));
+    const surfacePushes = strips.map((strip) => strip.samples.map(() => new Vector3()));
 
     for (let i = 0; i < particles.length; i++) {
       const particle = particles[i];
@@ -210,11 +212,19 @@ function avoidExactSelfIntersections(strips: ExactStrip[], options: ExactSymmetr
           : laneDelta === 0
           ? (stripRank(particle.strip.key, order) >= stripRank(other.strip.key, order) ? 1 : -1)
           : Math.sign(laneDelta);
-        const amount = overlap * overlap * contact * pairWeight * (0.74 + pass * 0.1);
+        const amount = overlap * overlap * contact * pairWeight * (0.74 + pass * 0.1) * strength;
         heightPushes[particle.stripIndex][particle.sampleIndex] += direction * amount;
         heightPushes[other.stripIndex][other.sampleIndex] -= direction * amount;
         weights[particle.stripIndex][particle.sampleIndex] += 1;
         weights[other.stripIndex][other.sampleIndex] += 1;
+
+        const surfaceDirection = delta.clone().sub(particle.sample.direction.clone().multiplyScalar(delta.dot(particle.sample.direction)));
+        if (surfaceDirection.lengthSq() > 0.0000001) {
+          const surfaceAmount = Math.min(0.038, amount / radius * 0.34);
+          surfaceDirection.normalize().multiplyScalar(surfaceAmount);
+          surfacePushes[particle.stripIndex][particle.sampleIndex].add(surfaceDirection);
+          surfacePushes[other.stripIndex][other.sampleIndex].sub(surfaceDirection);
+        }
       }
     }
 
@@ -225,6 +235,10 @@ function avoidExactSelfIntersections(strips: ExactStrip[], options: ExactSymmetr
         if (weight <= 0) continue;
         const sample = strip.samples[sampleIndex];
         sample.height = clamp(sample.height + heightPushes[stripIndex][sampleIndex] / weight, -heightLimit, heightLimit);
+        const surfacePush = surfacePushes[stripIndex][sampleIndex];
+        if (surfacePush.lengthSq() > 0.0000001) {
+          sample.direction.add(surfacePush.multiplyScalar(1 / Math.max(1, weight))).normalize();
+        }
       }
     }
   }
@@ -232,7 +246,7 @@ function avoidExactSelfIntersections(strips: ExactStrip[], options: ExactSymmetr
 
 function buildRibbonCollisionParticles(strips: ExactStrip[], radius: number, width: number) {
   const particles: CollisionParticle[] = [];
-  const lanes = [-0.92, 0, 0.92];
+  const lanes = [-0.96, 0, 0.96];
 
   for (let stripIndex = 0; stripIndex < strips.length; stripIndex++) {
     const strip = strips[stripIndex];
@@ -263,8 +277,8 @@ function buildRibbonCollisionParticles(strips: ExactStrip[], radius: number, wid
           sampleCount: strip.samples.length,
           lane,
           position,
-          contactRadius: lane === 0 ? width * 1.18 + 0.018 : width * 0.52 + 0.014,
-          collisionWeight: collisionWeight * (lane === 0 ? 1 : 0.86),
+          contactRadius: collisionContactRadius(lane, width),
+          collisionWeight: collisionWeight * (lane === 0 ? 1 : 0.78),
         });
       }
     }
@@ -273,8 +287,13 @@ function buildRibbonCollisionParticles(strips: ExactStrip[], radius: number, wid
   return particles;
 }
 
-function relaxExactStrips(strips: ExactStrip[], options: ExactSymmetricWeaveOptions, steps: number) {
-  const heightLimit = Math.max(options.shellThickness * 0.47, options.width * 1.75);
+function collisionContactRadius(lane: number, width: number) {
+  if (lane === 0) return width * 1.14 + 0.018;
+  return width * 0.68 + 0.016;
+}
+
+function relaxExactStrips(strips: ExactStrip[], options: ExactSymmetricWeaveOptions, steps: number, strength = 1) {
+  const heightLimit = Math.max(options.shellThickness * 0.7, options.width * 3.4);
   for (let step = 0; step < steps; step++) {
     for (const strip of strips) {
       const n = strip.samples.length;
@@ -284,10 +303,17 @@ function relaxExactStrips(strips: ExactStrip[], options: ExactSymmetricWeaveOpti
         const sample = strip.samples[i];
         const prev = strip.samples[(i - 1 + n) % n];
         const next = strip.samples[(i + 1) % n];
-        const localAmount = 0.035 * (1 - smootherstep(sample.wWindow));
         const average = prev.direction.clone().add(next.direction).normalize();
+        const curvature = 1 - clamp(sample.direction.dot(average), -1, 1);
+        const heightGradient = (Math.abs(sample.height - prev.height) + Math.abs(next.height - sample.height))
+          / Math.max(options.shellThickness, 0.001);
+        const crossingGate = 1 - 0.5 * smootherstep(heightGradient * 1.8);
+        const localAmount = (0.042 + 0.04 * smootherstep(curvature * 28))
+          * (1 - smootherstep(sample.wWindow * 1.35))
+          * crossingGate
+          * strength;
         nextDirections.push(slerpUnit(sample.direction, average, localAmount));
-        nextHeights[i] = clamp(lerp(sample.height, (prev.height + next.height) * 0.5, localAmount * 1.2), -heightLimit, heightLimit);
+        nextHeights[i] = clamp(lerp(sample.height, (prev.height + next.height) * 0.5, localAmount * 0.82), -heightLimit, heightLimit);
       }
       for (let i = 0; i < n; i++) {
         strip.samples[i].direction.copy(nextDirections[i]).normalize();
