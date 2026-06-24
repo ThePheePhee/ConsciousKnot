@@ -7,6 +7,7 @@ interface ExactSymmetricWeaveOptions {
   group: ExactSymmetryGroup;
   sourcePattern: ExactWeavePattern;
   targetPattern: ExactWeavePattern;
+  trajectoryPatterns?: ExactWeavePattern[];
   transitionMode: ExactTransitionMode;
   progress: number;
   samples: number;
@@ -17,6 +18,7 @@ interface ExactSymmetricWeaveOptions {
   liftAmplitude: number;
   showWPassage: boolean;
   relaxationSteps: number;
+  symmetrySettle: number;
 }
 
 interface StripKey {
@@ -36,6 +38,13 @@ interface ExactStrip {
   samples: ExactSample[];
 }
 
+interface ActiveExactTransition {
+  source: ExactWeaveSpec;
+  target: ExactWeaveSpec;
+  progress: number;
+  segmentIndex: number;
+}
+
 interface CollisionParticle {
   strip: ExactStrip;
   stripIndex: number;
@@ -50,14 +59,39 @@ interface CollisionParticle {
 
 export function buildExactSymmetricWeaveMesh(options: ExactSymmetricWeaveOptions) {
   const order = exactGroupOrder(options.group);
-  const source = exactWeaveSpec(options.sourcePattern);
-  const target = exactWeaveSpec(options.targetPattern);
-  const motifCount = Math.max(source.motifs.length, target.motifs.length);
-  const strips = buildStripKeys(order, motifCount).map((key) => buildStrip(key, source, target, options, order, motifCount));
+  const trajectory = exactTrajectory(options);
+  const active = activeExactTransition(trajectory, options.progress);
+  const motifCount = Math.max(active.source.motifs.length, active.target.motifs.length);
+  const strips = buildStripKeys(order, motifCount).map((key) => buildStrip(key, active, options, order, motifCount));
   const relaxSteps = Math.max(0, Math.round(options.relaxationSteps));
   relaxExactStrips(strips, options, relaxSteps);
   avoidExactSelfIntersections(strips, options, order, motifCount);
+  projectRotationalSymmetry(strips, order, options.symmetrySettle);
+  relaxExactStrips(strips, options, Math.ceil(relaxSteps * 0.35), 0.58);
+  projectRotationalSymmetry(strips, order, options.symmetrySettle * 0.55);
   return buildRibbonGeometry(strips, Math.max(0.2, options.shellRadius), Math.max(0.01, options.width), Math.max(4, Math.round(options.crossSamples)), options.showWPassage);
+}
+
+function exactTrajectory(options: ExactSymmetricWeaveOptions) {
+  const rawPatterns = options.trajectoryPatterns?.length
+    ? options.trajectoryPatterns
+    : [options.sourcePattern, options.targetPattern];
+  const patterns = rawPatterns.slice(0, 4);
+  while (patterns.length < 2) patterns.push(options.targetPattern);
+  return patterns.map((pattern) => exactWeaveSpec(pattern));
+}
+
+function activeExactTransition(trajectory: ExactWeaveSpec[], progress: number): ActiveExactTransition {
+  const segmentCount = Math.max(1, trajectory.length - 1);
+  const scaled = clamp01(progress) * segmentCount;
+  const segmentIndex = Math.min(segmentCount - 1, Math.floor(scaled));
+  const localProgress = scaled - segmentIndex;
+  return {
+    source: trajectory[segmentIndex],
+    target: trajectory[segmentIndex + 1],
+    progress: localProgress,
+    segmentIndex,
+  };
 }
 
 function buildStripKeys(order: number, motifCount: number) {
@@ -72,18 +106,16 @@ function buildStripKeys(order: number, motifCount: number) {
 
 function buildStrip(
   key: StripKey,
-  source: ExactWeaveSpec,
-  target: ExactWeaveSpec,
+  active: ActiveExactTransition,
   options: ExactSymmetricWeaveOptions,
   order: number,
   motifCount: number,
 ): ExactStrip {
   const stripCount = motifCount * order * 2;
   const samplesPerStrip = clamp(Math.round(options.samples / Math.sqrt(stripCount) * 0.72), 42, 108);
-  const progress = clamp01(options.progress);
-  const blend = smootherstep(progress);
-  const sourceMotif = source.motifs[key.motif % source.motifs.length];
-  const targetMotif = target.motifs[key.motif % target.motifs.length];
+  const blend = continuousMotionBlend(active.progress);
+  const sourceMotif = active.source.motifs[key.motif % active.source.motifs.length];
+  const targetMotif = active.target.motifs[key.motif % active.target.motifs.length];
   const samples: ExactSample[] = [];
 
   for (let i = 0; i < samplesPerStrip; i++) {
@@ -91,12 +123,12 @@ function buildStrip(
     const sourceDirection = motifDirection(sourceMotif, key, u, order, motifCount);
     const targetDirection = motifDirection(targetMotif, key, u, order, motifCount);
     const direction = slerpUnit(sourceDirection, targetDirection, blend);
-    const sourceHeight = motifHeight(source, sourceMotif, key, u, options.shellThickness, order, motifCount);
-    const targetHeight = motifHeight(target, targetMotif, key, u, options.shellThickness, order, motifCount);
+    const sourceHeight = motifHeight(active.source, sourceMotif, key, u, options.shellThickness, order, motifCount);
+    const targetHeight = motifHeight(active.target, targetMotif, key, u, options.shellThickness, order, motifCount);
     samples.push({
       direction,
       height: lerp(sourceHeight, targetHeight, blend),
-      wWindow: Math.abs(options.liftAmplitude) > 0.0001 ? scheduledOrbitPassage(key, u, options, order, motifCount) : 0,
+      wWindow: Math.abs(options.liftAmplitude) > 0.0001 ? scheduledOrbitPassage(key, u, active, options, order, motifCount) : 0,
     });
   }
 
@@ -147,17 +179,19 @@ function motifHeight(spec: ExactWeaveSpec, motif: ExactWeaveMotif, key: StripKey
 function scheduledOrbitPassage(
   key: StripKey,
   u: number,
+  active: ActiveExactTransition,
   options: ExactSymmetricWeaveOptions,
   order: number,
   motifCount: number,
 ) {
-  if (options.sourcePattern === options.targetPattern) return 0;
-  const progress = clamp01(options.progress);
+  if (active.source.pattern === active.target.pattern) return 0;
+  const progress = clamp01(active.progress);
   if (progress <= 0 || progress >= 1) return 0;
 
   const exactEventCount = Math.max(1, motifCount * 2);
   const eventCount = options.transitionMode === 'local study' ? 1 : exactEventCount;
   let eventPosition = progress * eventCount;
+  eventPosition += active.segmentIndex * 0.2360679775;
   if (options.transitionMode === 'phase-staggered orbits') eventPosition += key.copy / Math.max(1, order) * 0.38;
   const wrappedEventPosition = eventPosition % eventCount;
   const activeEvent = Math.min(eventCount - 1, Math.floor(wrappedEventPosition));
@@ -239,6 +273,46 @@ function avoidExactSelfIntersections(strips: ExactStrip[], options: ExactSymmetr
         if (surfacePush.lengthSq() > 0.0000001) {
           sample.direction.add(surfacePush.multiplyScalar(1 / Math.max(1, weight))).normalize();
         }
+      }
+    }
+  }
+}
+
+function projectRotationalSymmetry(strips: ExactStrip[], order: number, strength: number) {
+  const amount = clamp01(strength);
+  if (amount <= 0.0001 || strips.length === 0) return;
+  const wedge = TAU / order;
+  const byOrbit = new Map<string, ExactStrip[]>();
+
+  for (const strip of strips) {
+    const key = `${strip.key.motif}:${strip.key.mirror}`;
+    const orbit = byOrbit.get(key);
+    if (orbit) orbit.push(strip);
+    else byOrbit.set(key, [strip]);
+  }
+
+  for (const orbit of byOrbit.values()) {
+    const sampleCount = orbit[0]?.samples.length ?? 0;
+    if (sampleCount === 0) continue;
+
+    for (let sampleIndex = 0; sampleIndex < sampleCount; sampleIndex++) {
+      const canonical = new Vector3();
+      let totalWeight = 0;
+      for (const strip of orbit) {
+        const sample = strip.samples[sampleIndex];
+        const wGate = 1 - smootherstep(sample.wWindow * 1.5);
+        const weight = 0.35 + 0.65 * wGate;
+        canonical.add(rotateZ(sample.direction, -strip.key.copy * wedge).multiplyScalar(weight));
+        totalWeight += weight;
+      }
+      if (canonical.lengthSq() < 0.000001 || totalWeight <= 0) continue;
+      canonical.multiplyScalar(1 / totalWeight).normalize();
+
+      for (const strip of orbit) {
+        const sample = strip.samples[sampleIndex];
+        const wGate = 1 - smootherstep(sample.wWindow * 1.5);
+        const target = rotateZ(canonical, strip.key.copy * wedge);
+        sample.direction.copy(slerpUnit(sample.direction, target, amount * (0.45 + 0.55 * wGate))).normalize();
       }
     }
   }
@@ -518,6 +592,11 @@ function cyclicUnitDistance(a: number, b: number) {
 function smootherstep(x: number) {
   const t = clamp01(x);
   return t * t * t * (t * (t * 6 - 15) + 10);
+}
+
+function continuousMotionBlend(x: number) {
+  const t = clamp01(x);
+  return clamp01(t + 0.035 * Math.sin(TAU * t));
 }
 
 function smoothRange(edge0: number, edge1: number, x: number) {

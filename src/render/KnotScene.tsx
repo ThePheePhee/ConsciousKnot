@@ -95,6 +95,12 @@ export function KnotScene() {
           group: params.devExactSymmetryGroup,
           sourcePattern: params.devExactSource,
           targetPattern: params.devExactTarget,
+          trajectoryPatterns: [
+            params.devExactSource,
+            params.devExactTarget,
+            params.devExactThird,
+            params.devExactFourth,
+          ].slice(0, Math.round(params.devExactTrajectorySize)),
           transitionMode: params.devExactTransitionMode,
           progress: params.transitionProgress,
           samples: Math.round(params.devSampleCount),
@@ -105,6 +111,7 @@ export function KnotScene() {
           liftAmplitude: params.devLiftAmplitude,
           showWPassage: params.devShowWPassage,
           relaxationSteps: params.devExactRelaxationSteps,
+          symmetrySettle: params.devExactSymmetrySettle,
         });
       } else if (params.devCoreMode === 'spherical shell weave') {
         developerKnot.geometry = buildSphericalWeaveRibbonMesh({

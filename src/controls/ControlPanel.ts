@@ -39,8 +39,11 @@ export function createControlPanel(params: Params, onChange: () => void) {
 
   const exactDeveloper = gui.addFolder('Exact Symmetric Developer');
   withHelp(exactDeveloper.add(params, 'devExactSymmetryGroup', exactGroups).name('symmetry group').onChange(onChange), 'Finite dihedral group used to replicate every ribbon motif. The whole object is generated as group orbits, so symmetry is exact as a set.');
-  withHelp(exactDeveloper.add(params, 'devExactSource', exactPatterns).name('source weave').onChange(onChange), 'Starting symmetric weave family. These are clean-room orbit patterns, separate from the older parametric shell curves.');
-  withHelp(exactDeveloper.add(params, 'devExactTarget', exactPatterns).name('target weave').onChange(onChange), 'Target symmetric weave family for the transition.');
+  withHelp(exactDeveloper.add(params, 'devExactTrajectorySize', 2, 4, 1).name('trajectory weaves').onChange(onChange), 'Number of exact weave states in the cycle. Two gives the old source-to-target behavior; three or four creates a longer smooth path through the next selected symmetric states.');
+  withHelp(exactDeveloper.add(params, 'devExactSource', exactPatterns).name('weave 1').onChange(onChange), 'Starting symmetric weave family. These are clean-room orbit patterns, separate from the older parametric shell curves.');
+  withHelp(exactDeveloper.add(params, 'devExactTarget', exactPatterns).name('weave 2').onChange(onChange), 'Second symmetric weave family. With trajectory weaves set to 2, this is the target.');
+  withHelp(exactDeveloper.add(params, 'devExactThird', exactPatterns).name('weave 3').onChange(onChange), 'Third symmetric weave family used when trajectory weaves is set to 3 or 4.');
+  withHelp(exactDeveloper.add(params, 'devExactFourth', exactPatterns).name('weave 4').onChange(onChange), 'Fourth symmetric weave family used by the longest exact weave trajectory.');
   withHelp(exactDeveloper.add(params, 'devExactTransitionMode', exactTransitions).name('crossing schedule').onChange(onChange), 'How W passages are scheduled. Orbit crossings preserves exact symmetry by moving whole crossing orbits; local study intentionally breaks symmetry to inspect one neighborhood.');
   withHelp(exactDeveloper.add(params, 'transitionProgress', 0, 1, 0.0005).name('scrub').onChange(onChange), 'Scrub the exact symmetric transition. W appears only in declared crossing-orbit windows, not from relaxation or ribbon twist.');
   withHelp(exactDeveloper.add(params, 'devSampleCount', 240, 1200, 1).name('samples').onFinishChange(onChange), 'Approximate sample budget distributed across all replicated ribbon orbits.');
@@ -51,6 +54,7 @@ export function createControlPanel(params: Params, onChange: () => void) {
   withHelp(exactDeveloper.add(params, 'devLiftAmplitude', 0, 2.4, 0.01).name('4D lift').onChange(onChange), 'Enables compact W passages at declared crossing orbit events. Setting this to zero keeps all geometry in ordinary 3D.');
   withHelp(exactDeveloper.add(params, 'devShowWPassage').name('show W passage').onChange(onChange), 'When enabled, W-active sections are red and ghostly. When disabled, W-active ribbon sections disappear so no projected 3D self-intersection is shown.');
   withHelp(exactDeveloper.add(params, 'devExactRelaxationSteps', 0, 8, 1).name('relax steps').onFinishChange(onChange), 'Equivariant local smoothing applied inside each generated orbit. It smooths without creating W or changing crossing schedules.');
+  withHelp(exactDeveloper.add(params, 'devExactSymmetrySettle', 0, 1, 0.01).name('symmetry settle').onChange(onChange), 'Projects the relaxed weave back toward its exact rotational orbit structure after collision solving. Higher values favor cleaner symmetric states; lower values leave more local material freedom.');
 
   const shellDeveloper = gui.addFolder('Spherical Shell Developer');
   withHelp(shellDeveloper.add(params, 'devShellSource', shellPatterns).name('source shell').onChange(onChange), 'Starting spherical-shell diagram. These are realized in S2 x I, using radial height for over/under information rather than flattening onto one sphere.');

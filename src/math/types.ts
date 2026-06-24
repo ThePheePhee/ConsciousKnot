@@ -18,7 +18,17 @@ export type DevCrossingMode = 'projected intersections' | 'hidden 4D passage';
 export type DevSphereMode = 'off' | 'contain ball' | 'radial shell' | 'symmetric shell';
 export type DevCoreMode = 'exact symmetric shell weave' | 'spherical shell weave' | 'legacy knot curve';
 export type ExactSymmetryGroup = 'D6' | 'D8' | 'D10';
-export type ExactWeavePattern = 'dihedral basket' | 'temari orbit' | 'trihex orbit' | 'geodesic flower';
+export type ExactWeavePattern =
+  | 'dihedral basket'
+  | 'temari orbit'
+  | 'trihex orbit'
+  | 'geodesic flower'
+  | 'loxodrome lattice'
+  | 'kagome rosette'
+  | 'goldberg shell'
+  | 'flower-of-life shell'
+  | 'pentagonal star braid'
+  | 'dense phyllotaxis';
 export type ExactTransitionMode = 'orbit crossings' | 'phase-staggered orbits' | 'local study';
 export type DevShellPattern =
   | 'unknot shell'
@@ -120,10 +130,14 @@ export interface Params {
   devFourthKnot: DevKnotKind;
   devCoreMode: DevCoreMode;
   devExactSymmetryGroup: ExactSymmetryGroup;
+  devExactTrajectorySize: number;
   devExactSource: ExactWeavePattern;
   devExactTarget: ExactWeavePattern;
+  devExactThird: ExactWeavePattern;
+  devExactFourth: ExactWeavePattern;
   devExactTransitionMode: ExactTransitionMode;
   devExactRelaxationSteps: number;
+  devExactSymmetrySettle: number;
   devShellSource: DevShellPattern;
   devShellTarget: DevShellPattern;
   devShellRadius: number;
