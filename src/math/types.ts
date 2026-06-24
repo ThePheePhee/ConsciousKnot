@@ -138,6 +138,9 @@ export interface Params {
   devExactTransitionMode: ExactTransitionMode;
   devExactRelaxationSteps: number;
   devExactSymmetrySettle: number;
+  devExactSolidSolve: boolean;
+  devExactSolidPasses: number;
+  devExactCreaseStrength: number;
   devShellSource: DevShellPattern;
   devShellTarget: DevShellPattern;
   devShellRadius: number;

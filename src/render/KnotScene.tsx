@@ -112,6 +112,9 @@ export function KnotScene() {
           showWPassage: params.devShowWPassage,
           relaxationSteps: params.devExactRelaxationSteps,
           symmetrySettle: params.devExactSymmetrySettle,
+          solidSolve: params.devExactSolidSolve,
+          solidPasses: params.devExactSolidPasses,
+          creaseStrength: params.devExactCreaseStrength,
         });
       } else if (params.devCoreMode === 'spherical shell weave') {
         developerKnot.geometry = buildSphericalWeaveRibbonMesh({

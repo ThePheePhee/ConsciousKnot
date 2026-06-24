@@ -19,6 +19,9 @@ interface ExactSymmetricWeaveOptions {
   showWPassage: boolean;
   relaxationSteps: number;
   symmetrySettle: number;
+  solidSolve: boolean;
+  solidPasses: number;
+  creaseStrength: number;
 }
 
 interface StripKey {
@@ -57,6 +60,24 @@ interface CollisionParticle {
   collisionWeight: number;
 }
 
+interface SegmentParticle {
+  strip: ExactStrip;
+  stripIndex: number;
+  sampleIndex: number;
+  nextIndex: number;
+  sampleCount: number;
+  midpoint: Vector3;
+  start: Vector3;
+  end: Vector3;
+  collisionWeight: number;
+}
+
+interface ExactPushBuffers {
+  tangentPushes: Vector3[][];
+  heightPushes: Float32Array[];
+  weights: Float32Array[];
+}
+
 export function buildExactSymmetricWeaveMesh(options: ExactSymmetricWeaveOptions) {
   const order = exactGroupOrder(options.group);
   const trajectory = exactTrajectory(options);
@@ -66,9 +87,12 @@ export function buildExactSymmetricWeaveMesh(options: ExactSymmetricWeaveOptions
   const relaxSteps = Math.max(0, Math.round(options.relaxationSteps));
   relaxExactStrips(strips, options, relaxSteps);
   avoidExactSelfIntersections(strips, options, order, motifCount);
+  resolveExactSolidFibres(strips, options, order, motifCount);
   projectRotationalSymmetry(strips, order, options.symmetrySettle);
   relaxExactStrips(strips, options, Math.ceil(relaxSteps * 0.35), 0.58);
+  resolveExactSolidFibres(strips, options, order, motifCount, 0.65);
   projectRotationalSymmetry(strips, order, options.symmetrySettle * 0.55);
+  resolveExactSolidFibres(strips, options, order, motifCount, 0.42, 2);
   return buildRibbonGeometry(strips, Math.max(0.2, options.shellRadius), Math.max(0.01, options.width), Math.max(4, Math.round(options.crossSamples)), options.showWPassage);
 }
 
@@ -318,6 +342,339 @@ function projectRotationalSymmetry(strips: ExactStrip[], order: number, strength
   }
 }
 
+function resolveExactSolidFibres(
+  strips: ExactStrip[],
+  options: ExactSymmetricWeaveOptions,
+  order: number,
+  motifCount: number,
+  strengthScale = 1,
+  passOverride?: number,
+) {
+  if (!options.solidSolve) return;
+  const passes = passOverride ?? Math.max(0, Math.round(options.solidPasses));
+  if (passes <= 0) return;
+
+  const radius = Math.max(0.2, options.shellRadius);
+  const width = Math.max(0.01, options.width);
+  const widthStress = clamp((width - 0.065) / 0.09, 0, 1);
+  const heightLimit = Math.max(options.shellThickness * 0.86, width * 5.2);
+  const strength = clamp01(strengthScale);
+  const creaseStrength = clamp01(options.creaseStrength);
+  const pointContact = Math.max(width * (2.55 + widthStress * 0.72), 0.13 + widthStress * 0.03);
+  const segmentContact = Math.max(width * (2.85 + widthStress * 0.9), pointContact * 1.06);
+  const surfaceContact = Math.max(width * (0.96 + widthStress * 0.42), 0.05 + widthStress * 0.02);
+
+  for (let pass = 0; pass < passes; pass++) {
+    const buffers = createExactPushBuffers(strips);
+    accumulateSolidPointContacts(strips, buffers, radius, width, pointContact, strength * (0.72 + pass * 0.045), creaseStrength, motifCount);
+    accumulateSolidSegmentContacts(strips, buffers, radius, segmentContact, strength * (0.56 + pass * 0.04), creaseStrength, order, motifCount);
+    accumulateSolidSurfaceContacts(strips, buffers, radius, width, surfaceContact, strength * (0.88 + pass * 0.055), creaseStrength, motifCount, widthStress);
+    applyExactPushBuffers(strips, buffers, radius, heightLimit, width * (0.62 + widthStress * 0.14));
+
+    if (pass % 2 === 1 || pass === passes - 1) {
+      relaxExactStrips(strips, options, 1, 0.18 + 0.1 * (1 - widthStress));
+    }
+  }
+}
+
+function createExactPushBuffers(strips: ExactStrip[]): ExactPushBuffers {
+  return {
+    tangentPushes: strips.map((strip) => strip.samples.map(() => new Vector3())),
+    heightPushes: strips.map((strip) => new Float32Array(strip.samples.length)),
+    weights: strips.map((strip) => new Float32Array(strip.samples.length)),
+  };
+}
+
+function accumulateSolidPointContacts(
+  strips: ExactStrip[],
+  buffers: ExactPushBuffers,
+  radius: number,
+  width: number,
+  contact: number,
+  strength: number,
+  creaseStrength: number,
+  motifCount: number,
+) {
+  const particles = buildCenterCollisionParticles(strips, radius, width, motifCount);
+  const grid = buildSpatialGrid(particles.map((particle) => particle.position), contact);
+  const contactSq = contact * contact;
+
+  for (let i = 0; i < particles.length; i++) {
+    const particle = particles[i];
+    const nearby = nearbySpatialIndices(grid, particle.position, contact);
+    for (const j of nearby) {
+      if (j <= i) continue;
+      const other = particles[j];
+      if (particle.stripIndex === other.stripIndex && cyclicIndexDistance(particle.sampleIndex, other.sampleIndex, particle.sampleCount) < 9) continue;
+      const pairWeight = particle.collisionWeight * other.collisionWeight;
+      if (pairWeight <= 0.0001) continue;
+
+      const delta = particle.position.clone().sub(other.position);
+      const distanceSq = delta.lengthSq();
+      if (distanceSq >= contactSq) continue;
+      const distance = Math.sqrt(Math.max(0.0000001, distanceSq));
+      const overlap = (contact - distance) / contact;
+      const amount = overlap * overlap * contact * strength * pairWeight;
+      const direction = stableDirection(delta, particle.stripIndex * 4096 + particle.sampleIndex, other.stripIndex * 4096 + other.sampleIndex);
+      addExactWorldPush(strips, buffers, particle.stripIndex, particle.sampleIndex, direction, amount, creaseStrength);
+      addExactWorldPush(strips, buffers, other.stripIndex, other.sampleIndex, direction.clone().multiplyScalar(-1), amount, creaseStrength);
+    }
+  }
+}
+
+function accumulateSolidSegmentContacts(
+  strips: ExactStrip[],
+  buffers: ExactPushBuffers,
+  radius: number,
+  contact: number,
+  strength: number,
+  creaseStrength: number,
+  order: number,
+  motifCount: number,
+) {
+  const segments = buildSegmentParticles(strips, radius);
+  const grid = buildSpatialGrid(segments.map((segment) => segment.midpoint), contact);
+  const contactSq = contact * contact;
+
+  for (let i = 0; i < segments.length; i++) {
+    const segment = segments[i];
+    const nearby = nearbySpatialIndices(grid, segment.midpoint, contact);
+    for (const j of nearby) {
+      if (j <= i) continue;
+      const other = segments[j];
+      if (segment.stripIndex === other.stripIndex && cyclicIndexDistance(segment.sampleIndex, other.sampleIndex, segment.sampleCount) < 8) continue;
+      if (segment.strip.key.motif === other.strip.key.motif
+        && segment.strip.key.mirror === other.strip.key.mirror
+        && cyclicIndexDistance(segment.sampleIndex, other.sampleIndex, segment.sampleCount) < 5) continue;
+      const pairWeight = segment.collisionWeight * other.collisionWeight;
+      if (pairWeight <= 0.0001) continue;
+
+      const closest = closestSegmentParameters(segment.start, segment.end, other.start, other.end);
+      if (closest.distanceSq >= contactSq) continue;
+      const distance = Math.sqrt(Math.max(0.0000001, closest.distanceSq));
+      const overlap = (contact - distance) / contact;
+      const orderBias = contactOrderingBias(segment.strip.key, other.strip.key, order, motifCount);
+      const direction = stableDirection(closest.delta, segment.stripIndex * 4096 + segment.sampleIndex, other.stripIndex * 4096 + other.sampleIndex);
+      const response = direction.addScaledVector(segment.strip.samples[segment.sampleIndex].direction, orderBias * 0.18).normalize();
+      const amount = overlap * overlap * contact * strength * pairWeight;
+      addExactWorldPush(strips, buffers, segment.stripIndex, segment.sampleIndex, response, amount * (1 - closest.s), creaseStrength);
+      addExactWorldPush(strips, buffers, segment.stripIndex, segment.nextIndex, response, amount * closest.s, creaseStrength);
+      addExactWorldPush(strips, buffers, other.stripIndex, other.sampleIndex, response.clone().multiplyScalar(-1), amount * (1 - closest.t), creaseStrength);
+      addExactWorldPush(strips, buffers, other.stripIndex, other.nextIndex, response.clone().multiplyScalar(-1), amount * closest.t, creaseStrength);
+    }
+  }
+}
+
+function accumulateSolidSurfaceContacts(
+  strips: ExactStrip[],
+  buffers: ExactPushBuffers,
+  radius: number,
+  width: number,
+  contact: number,
+  strength: number,
+  creaseStrength: number,
+  motifCount: number,
+  widthStress: number,
+) {
+  const probes = buildSolidSurfaceParticles(strips, radius, width, motifCount, widthStress);
+  const cellSize = Math.max(contact * 2.05, width * (1.1 + widthStress * 0.45));
+  const grid = buildSpatialGrid(probes.map((probe) => probe.position), cellSize);
+  const contactSq = contact * contact;
+
+  for (let i = 0; i < probes.length; i++) {
+    const probe = probes[i];
+    const nearby = nearbySpatialIndices(grid, probe.position, cellSize);
+    for (const j of nearby) {
+      if (j <= i) continue;
+      const other = probes[j];
+      if (probe.stripIndex === other.stripIndex && cyclicIndexDistance(probe.sampleIndex, other.sampleIndex, probe.sampleCount) < 9) continue;
+      const pairWeight = probe.collisionWeight * other.collisionWeight;
+      if (pairWeight <= 0.0001) continue;
+
+      const delta = probe.position.clone().sub(other.position);
+      const distanceSq = delta.lengthSq();
+      if (distanceSq >= contactSq) continue;
+      const distance = Math.sqrt(Math.max(0.0000001, distanceSq));
+      const overlap = (contact - distance) / contact;
+      const separation = stableDirection(delta, probe.stripIndex * 4096 + probe.sampleIndex, other.stripIndex * 4096 + other.sampleIndex);
+      const curl = symmetricCurlDirection(probe.sample.direction, separation, probe.sampleIndex, Math.max(2, motifCount * 2));
+      const response = separation
+        .clone()
+        .multiplyScalar(0.68 - widthStress * 0.08)
+        .addScaledVector(curl, (0.32 + widthStress * 0.18) * overlap)
+        .normalize();
+      const amount = overlap * overlap * contact * strength * pairWeight * (1 + widthStress * 0.5);
+      addExactWorldPush(strips, buffers, probe.stripIndex, probe.sampleIndex, response, amount, creaseStrength);
+      addExactWorldPush(strips, buffers, other.stripIndex, other.sampleIndex, response.clone().multiplyScalar(-1), amount, creaseStrength);
+    }
+  }
+}
+
+function applyExactPushBuffers(strips: ExactStrip[], buffers: ExactPushBuffers, radius: number, heightLimit: number, maxMove: number) {
+  for (let stripIndex = 0; stripIndex < strips.length; stripIndex++) {
+    const strip = strips[stripIndex];
+    for (let sampleIndex = 0; sampleIndex < strip.samples.length; sampleIndex++) {
+      const weight = buffers.weights[stripIndex][sampleIndex];
+      if (weight <= 0) continue;
+      const sample = strip.samples[sampleIndex];
+      const tangentMove = buffers.tangentPushes[stripIndex][sampleIndex].multiplyScalar(1 / weight);
+      const tangentLength = tangentMove.length();
+      if (tangentLength > maxMove) tangentMove.multiplyScalar(maxMove / tangentLength);
+      sample.direction.add(tangentMove.multiplyScalar(1 / Math.max(0.4, radius + sample.height))).normalize();
+      const heightMove = clamp(buffers.heightPushes[stripIndex][sampleIndex] / weight, -maxMove, maxMove);
+      sample.height = clamp(sample.height + heightMove, -heightLimit, heightLimit);
+    }
+  }
+}
+
+function addExactWorldPush(
+  strips: ExactStrip[],
+  buffers: ExactPushBuffers,
+  stripIndex: number,
+  sampleIndex: number,
+  direction: Vector3,
+  amount: number,
+  creaseStrength: number,
+) {
+  if (amount <= 0) return;
+  const n = strips[stripIndex].samples.length;
+  distributeExactWorldPush(strips, buffers, stripIndex, sampleIndex, direction, amount, 1);
+  const crease = clamp01(creaseStrength);
+  if (crease <= 0.0001) return;
+  distributeExactWorldPush(strips, buffers, stripIndex, (sampleIndex - 1 + n) % n, direction, amount * crease * 0.46, 0.7);
+  distributeExactWorldPush(strips, buffers, stripIndex, (sampleIndex + 1) % n, direction, amount * crease * 0.46, 0.7);
+  distributeExactWorldPush(strips, buffers, stripIndex, (sampleIndex - 2 + n) % n, direction, amount * crease * 0.2, 0.45);
+  distributeExactWorldPush(strips, buffers, stripIndex, (sampleIndex + 2) % n, direction, amount * crease * 0.2, 0.45);
+}
+
+function distributeExactWorldPush(
+  strips: ExactStrip[],
+  buffers: ExactPushBuffers,
+  stripIndex: number,
+  sampleIndex: number,
+  direction: Vector3,
+  amount: number,
+  weight: number,
+) {
+  const sample = strips[stripIndex].samples[sampleIndex];
+  const radial = sample.direction;
+  const radialPart = direction.dot(radial);
+  const tangentPart = direction.clone().sub(radial.clone().multiplyScalar(radialPart));
+  buffers.tangentPushes[stripIndex][sampleIndex].addScaledVector(tangentPart, amount);
+  buffers.heightPushes[stripIndex][sampleIndex] += radialPart * amount;
+  buffers.weights[stripIndex][sampleIndex] += weight;
+}
+
+function buildCenterCollisionParticles(strips: ExactStrip[], radius: number, width: number, motifCount: number): CollisionParticle[] {
+  const particles: CollisionParticle[] = [];
+  for (let stripIndex = 0; stripIndex < strips.length; stripIndex++) {
+    const strip = strips[stripIndex];
+    for (let sampleIndex = 0; sampleIndex < strip.samples.length; sampleIndex++) {
+      const sample = strip.samples[sampleIndex];
+      const collisionWeight = sampleCollisionWeight(sample);
+      if (collisionWeight <= 0.0001) continue;
+      particles.push({
+        strip,
+        stripIndex,
+        sample,
+        sampleIndex,
+        sampleCount: strip.samples.length,
+        lane: familyLane(strip.key, motifCount),
+        position: sample.direction.clone().multiplyScalar(radius + sample.height),
+        contactRadius: width * 0.92 + 0.018,
+        collisionWeight,
+      });
+    }
+  }
+  return particles;
+}
+
+function buildSegmentParticles(strips: ExactStrip[], radius: number): SegmentParticle[] {
+  const segments: SegmentParticle[] = [];
+  for (let stripIndex = 0; stripIndex < strips.length; stripIndex++) {
+    const strip = strips[stripIndex];
+    const positions = strip.samples.map((sample) => sample.direction.clone().multiplyScalar(radius + sample.height));
+    for (let sampleIndex = 0; sampleIndex < strip.samples.length; sampleIndex++) {
+      const nextIndex = (sampleIndex + 1) % strip.samples.length;
+      const collisionWeight = segmentCollisionWeight(strip.samples, sampleIndex, nextIndex);
+      if (collisionWeight <= 0.0001) continue;
+      segments.push({
+        strip,
+        stripIndex,
+        sampleIndex,
+        nextIndex,
+        sampleCount: strip.samples.length,
+        start: positions[sampleIndex],
+        end: positions[nextIndex],
+        midpoint: positions[sampleIndex].clone().add(positions[nextIndex]).multiplyScalar(0.5),
+        collisionWeight,
+      });
+    }
+  }
+  return segments;
+}
+
+function buildSolidSurfaceParticles(strips: ExactStrip[], radius: number, width: number, motifCount: number, widthStress: number) {
+  const particles: CollisionParticle[] = [];
+  const lanes = solidSurfaceLanes(widthStress);
+  for (let stripIndex = 0; stripIndex < strips.length; stripIndex++) {
+    const strip = strips[stripIndex];
+    const centers = strip.samples.map((sample) => sample.direction.clone().multiplyScalar(radius + sample.height));
+    for (let sampleIndex = 0; sampleIndex < strip.samples.length; sampleIndex++) {
+      const sample = strip.samples[sampleIndex];
+      const collisionWeight = sampleCollisionWeight(sample);
+      if (collisionWeight <= 0.0001) continue;
+      const center = centers[sampleIndex];
+      const prev = centers[(sampleIndex - 1 + centers.length) % centers.length];
+      const next = centers[(sampleIndex + 1) % centers.length];
+      const tangent = next.clone().sub(prev).normalize();
+      const outward = sample.direction.clone().normalize();
+      let normal = outward.clone().cross(tangent).normalize();
+      if (normal.lengthSq() < 0.000001) normal = projectedReferenceNormal(tangent);
+
+      for (const lane of lanes) {
+        const edge = Math.pow(Math.abs(lane), 2.8);
+        particles.push({
+          strip,
+          stripIndex,
+          sample,
+          sampleIndex,
+          sampleCount: strip.samples.length,
+          lane,
+          position: center
+            .clone()
+            .addScaledVector(normal, width * lane)
+            .addScaledVector(outward, edge * width * 0.08),
+          contactRadius: solidSurfaceContactRadius(lane, width),
+          collisionWeight: collisionWeight * (0.55 + edge * 0.45 + (lane === 0 ? 0.18 : 0)),
+        });
+      }
+    }
+  }
+  return particles;
+}
+
+function solidSurfaceLanes(widthStress: number) {
+  if (widthStress > 0.72) return [-0.98, -0.74, -0.5, -0.26, 0, 0.26, 0.5, 0.74, 0.98];
+  if (widthStress > 0.28) return [-0.98, -0.62, -0.28, 0, 0.28, 0.62, 0.98];
+  return [-0.96, -0.48, 0, 0.48, 0.96];
+}
+
+function solidSurfaceContactRadius(lane: number, width: number) {
+  const edge = Math.pow(Math.abs(lane), 1.8);
+  return width * (0.34 + edge * 0.18) + 0.012;
+}
+
+function segmentCollisionWeight(samples: ExactSample[], a: number, b: number) {
+  return Math.min(sampleCollisionWeight(samples[a]), sampleCollisionWeight(samples[b]));
+}
+
+function contactOrderingBias(a: StripKey, b: StripKey, order: number, motifCount: number) {
+  const lane = familyLane(a, motifCount) - familyLane(b, motifCount);
+  if (Math.abs(lane) > 0.001) return Math.sign(lane);
+  return stripRank(a, order) >= stripRank(b, order) ? 1 : -1;
+}
+
 function buildRibbonCollisionParticles(strips: ExactStrip[], radius: number, width: number) {
   const particles: CollisionParticle[] = [];
   const lanes = [-0.96, 0, 0.96];
@@ -532,6 +889,42 @@ function slerpUnit(a: Vector3, b: Vector3, t: number) {
   if (relative.lengthSq() < 0.000001) return a.clone().lerp(b, amount).normalize();
   relative.normalize();
   return a.clone().multiplyScalar(Math.cos(theta)).add(relative.multiplyScalar(Math.sin(theta))).normalize();
+}
+
+function closestSegmentParameters(a0: Vector3, a1: Vector3, b0: Vector3, b1: Vector3) {
+  const u = a1.clone().sub(a0);
+  const v = b1.clone().sub(b0);
+  const w = a0.clone().sub(b0);
+  const aa = u.dot(u);
+  const bb = v.dot(v);
+  const ab = u.dot(v);
+  const aw = u.dot(w);
+  const bw = v.dot(w);
+  const denom = aa * bb - ab * ab;
+  let s = denom > 0.0000001 ? (ab * bw - bb * aw) / denom : 0;
+  let t = denom > 0.0000001 ? (aa * bw - ab * aw) / denom : 0;
+  s = clamp01(s);
+  t = clamp01(t);
+  const aPoint = a0.clone().addScaledVector(u, s);
+  const bPoint = b0.clone().addScaledVector(v, t);
+  const delta = aPoint.clone().sub(bPoint);
+  return { s, t, delta, distanceSq: delta.lengthSq() };
+}
+
+function stableDirection(delta: Vector3, i: number, j: number) {
+  if (delta.lengthSq() > 0.0000001) return delta.normalize();
+  const seed = Math.sin((i + 1) * 12.9898 + (j + 1) * 78.233) * 43758.5453;
+  const angle = (seed - Math.floor(seed)) * Math.PI * 2;
+  return new Vector3(Math.cos(angle), Math.sin(angle), Math.sin(angle * 1.7)).normalize();
+}
+
+function symmetricCurlDirection(radial: Vector3, separation: Vector3, index: number, symmetryOrder: number) {
+  let curl = radial.clone().cross(separation);
+  if (curl.lengthSq() < 0.000001) curl = projectedReferenceNormal(radial);
+  curl.normalize();
+  const azimuth = Math.atan2(radial.y, radial.x);
+  const handedness = Math.sin(azimuth * symmetryOrder + index * 0.38196601125) >= 0 ? 1 : -1;
+  return curl.multiplyScalar(handedness);
 }
 
 function compactEventWWindow(localTime: number) {
