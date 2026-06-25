@@ -75,6 +75,8 @@ export function createControlPanel(params: Params, onChange: () => void) {
   presentation.add(params, 'rotationY', -0.22, 0.22, 0.001).name('turn drift');
   presentation.add(params, 'rotationZ', -0.18, 0.18, 0.001).name('roll drift');
   presentation.add(params, 'diamondLightStrength', 0, 5, 0.01).name('inner light');
+  presentation.add(params, 'innerFogEnabled').name('thin fog');
+  presentation.add(params, 'innerFogStrength', 0, 1.6, 0.01).name('seep strength');
   presentation.add(params, 'bloomStrength', 0, 1.2, 0.01).name('bloom');
 
   const surface = gui.addFolder('Ribbon Shader');

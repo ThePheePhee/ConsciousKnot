@@ -76,6 +76,8 @@ export interface Params {
   rotationZ: number;
   autoRotate: boolean;
   diamondLightStrength: number;
+  innerFogEnabled: boolean;
+  innerFogStrength: number;
   bloomStrength: number;
   coreSize: number;
   sparkleStrength: number;

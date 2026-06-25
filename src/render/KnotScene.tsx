@@ -19,7 +19,7 @@ import { buildDeveloperRibbonMesh } from '../geometry/buildDeveloperRibbonMesh';
 import { buildExactSymmetricWeaveMesh } from '../symmetric-weave/mesh';
 import { createControlPanel } from '../controls/ControlPanel';
 import { defaultParams } from '../controls/defaultParams';
-import { createClassicRibbonMaterial, createCore } from './materials';
+import { createClassicRibbonMaterial, createCore, createInnerFog } from './materials';
 import { addLights } from './lights';
 import type { Params } from '../math/types';
 
@@ -63,6 +63,9 @@ export function KnotScene() {
     const core = createCore(params.coreSize);
     core.visible = false;
     interactionRig.add(core);
+    const innerFog = createInnerFog(1);
+    innerFog.renderOrder = -1;
+    interactionRig.add(innerFog);
     const sparkleMaterial = new MeshBasicMaterial({ color: 0xeef8ff, transparent: true, opacity: 0.48, blending: AdditiveBlending });
     const sparkles = Array.from({ length: 6 }, (_, i) => {
       const s = new Mesh(new SphereGeometry(0.012, 12, 8), sparkleMaterial);
@@ -201,7 +204,21 @@ export function KnotScene() {
       uniforms.fibreDensity.value = params.fibreDensity;
       uniforms.fibreStrength.value = params.fibreStrength;
       uniforms.lightStrength.value = params.diamondLightStrength;
+      uniforms.innerFogEnabled.value = params.innerFogEnabled ? 1 : 0;
+      uniforms.innerFogStrength.value = params.innerFogStrength;
       uniforms.corePosition.value = core.position;
+      const fogMaterial = innerFog.material;
+      fogMaterial.uniforms.time.value = time;
+      fogMaterial.uniforms.intensity.value = params.innerFogEnabled ? params.innerFogStrength : 0;
+      fogMaterial.uniforms.lightStrength.value = params.diamondLightStrength;
+      fogMaterial.uniforms.corePosition.value = core.position;
+      const fogRadius = params.mainMode === 'exact symmetric shell weave'
+        ? params.shellRadius + params.shellThickness * 0.55
+        : params.simpleSphereMode === 'off'
+        ? 1.42
+        : params.simpleSphereRadius * 1.08;
+      innerFog.scale.setScalar(fogRadius);
+      innerFog.visible = params.innerFogEnabled && params.innerFogStrength > 0.001;
     };
 
     const gui = createControlPanel(params, () => {
@@ -309,6 +326,8 @@ export function KnotScene() {
       clearExactGeometryCache();
       ribbon.geometry.dispose();
       material.dispose();
+      innerFog.geometry.dispose();
+      innerFog.material.dispose();
       mount.removeChild(renderer.domElement);
     };
   }, []);

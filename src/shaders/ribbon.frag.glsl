@@ -6,6 +6,8 @@ uniform float fractalStrength;
 uniform float fibreDensity;
 uniform float fibreStrength;
 uniform float lightStrength;
+uniform float innerFogEnabled;
+uniform float innerFogStrength;
 uniform float colorSpeed;
 uniform float colorScale;
 uniform vec3 corePosition;
@@ -57,12 +59,25 @@ void main() {
   vec3 strandColor = palette(longitudinal + vUv.y * 1.4 + cellFine * 0.22);
   vec3 micro = mix(vec3(0.78), vec3(0.45, 0.72, 0.96) + 0.48 * palette(longitudinal + 0.2), fractalStrength * (0.26 + 0.52 * cell));
   vec3 coreVec = corePosition - vWorldPosition;
-  float coreGlow = lightStrength * 0.012 / max(dot(coreVec, coreVec), 0.16);
+  float coreDistanceSq = max(dot(coreVec, coreVec), 0.16);
+  vec3 coreDir = normalize(coreVec);
+  float coreGlow = lightStrength * 0.014 / coreDistanceSq;
+  float transmitted = max(dot(n, coreDir), 0.0);
+  float thinEdge = pow(fresnel, 0.7);
+  float poreNoise = smoothstep(0.28, 0.92, cell * 0.7 + cellFine * 0.38);
+  float fogGate = clamp(innerFogEnabled, 0.0, 1.0) * innerFogStrength;
+  float materialSeep = fogGate
+    * lightStrength
+    * (0.035 / coreDistanceSq + 0.075 * thinEdge)
+    * (0.36 + 0.64 * pow(transmitted, 0.7))
+    * (0.58 + 0.42 * poreNoise);
   vec3 white = vec3(0.9, 0.96, 1.0);
   vec3 color = oil * micro;
   color *= 0.78 - 0.22 * strandGroove * fibreStrength;
   color += strandColor * strands * fibreStrength * 0.82;
   color += white * (fresnel * 0.52 + edge * 0.42 + coreGlow);
+  color += vec3(0.62, 0.92, 1.0) * materialSeep;
+  color += palette(longitudinal + 0.68) * materialSeep * 0.38;
   color += palette(longitudinal + 0.43) * strands * fibreStrength * 0.24;
   float w = clamp(vWIntensity, 0.0, 1.0);
   color = mix(color, vec3(3.4, 0.0, 0.0), w);
