@@ -141,6 +141,9 @@ export interface Params {
   devExactSolidSolve: boolean;
   devExactSolidPasses: number;
   devExactCreaseStrength: number;
+  devAdaptivePlayback: boolean;
+  devPlaybackQuality: number;
+  devPlaybackCacheFrames: number;
   devShellSource: DevShellPattern;
   devShellTarget: DevShellPattern;
   devShellRadius: number;

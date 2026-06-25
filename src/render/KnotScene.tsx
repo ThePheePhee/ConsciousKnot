@@ -63,6 +63,9 @@ export function KnotScene() {
     const developerMaterial = createClassicRibbonMaterial(params);
     const developerKnot = new Mesh(new BufferGeometry(), developerMaterial);
     interactionRig.add(developerKnot);
+    const exactGeometryCache = new Map<string, BufferGeometry>();
+    const cachedExactGeometries = new Set<BufferGeometry>();
+    const maxExactGeometryCacheEntries = 48;
     let phaseCacheKey = '';
     let phaseSourceMid = 0;
     let phaseSourceTarget = 0;
@@ -88,10 +91,65 @@ export function KnotScene() {
       dirty = false;
     };
 
-    const updateDeveloperGeometry = () => {
+    const disposeDeveloperGeometry = (geometry: BufferGeometry) => {
+      if (!cachedExactGeometries.has(geometry)) geometry.dispose();
+    };
+
+    const setDeveloperGeometry = (geometry: BufferGeometry) => {
       const old = developerKnot.geometry;
+      developerKnot.geometry = geometry;
+      if (old !== geometry) disposeDeveloperGeometry(old);
+      dirty = false;
+    };
+
+    const cacheExactGeometry = (key: string, geometry: BufferGeometry) => {
+      exactGeometryCache.set(key, geometry);
+      cachedExactGeometries.add(geometry);
+      while (exactGeometryCache.size > maxExactGeometryCacheEntries) {
+        const oldest = exactGeometryCache.entries().next().value as [string, BufferGeometry] | undefined;
+        if (!oldest) break;
+        const [oldestKey, oldestGeometry] = oldest;
+        exactGeometryCache.delete(oldestKey);
+        cachedExactGeometries.delete(oldestGeometry);
+        if (developerKnot.geometry !== oldestGeometry) oldestGeometry.dispose();
+      }
+    };
+
+    const clearExactGeometryCache = () => {
+      for (const geometry of exactGeometryCache.values()) {
+        if (developerKnot.geometry !== geometry) geometry.dispose();
+      }
+      exactGeometryCache.clear();
+      cachedExactGeometries.clear();
+    };
+
+    const updateDeveloperGeometry = () => {
       if (params.devCoreMode === 'exact symmetric shell weave') {
-        developerKnot.geometry = buildExactSymmetricWeaveMesh({
+        const livePlayback = params.devAdaptivePlayback && !params.paused && !dragging && params.autoTransitionSpeed > 0 && params.globalSpeed > 0;
+        const quality = clamp01Number(params.devPlaybackQuality);
+        const sampleScale = livePlayback ? 0.65 + 0.35 * quality : 1;
+        const crossScale = livePlayback ? 0.55 + 0.45 * quality : 1;
+        const relaxationScale = livePlayback ? 0.45 + 0.45 * quality : 1;
+        const solidScale = livePlayback ? 0.16 + 0.46 * quality : 1;
+        const relaxationSteps = params.devExactRelaxationSteps > 0
+          ? Math.max(livePlayback ? 1 : 0, Math.round(params.devExactRelaxationSteps * relaxationScale))
+          : 0;
+        const solidPasses = params.devExactSolidSolve && params.devExactSolidPasses > 0
+          ? Math.max(livePlayback ? 1 : 0, Math.round(params.devExactSolidPasses * solidScale))
+          : 0;
+        const progress = livePlayback
+          ? quantizeProgress(params.transitionProgress, Math.round(params.devPlaybackCacheFrames))
+          : params.transitionProgress;
+        const cacheKey = livePlayback ? exactGeometryCacheKey(params, progress, quality) : '';
+        const cached = livePlayback ? exactGeometryCache.get(cacheKey) : undefined;
+        if (cached) {
+          exactGeometryCache.delete(cacheKey);
+          exactGeometryCache.set(cacheKey, cached);
+          setDeveloperGeometry(cached);
+          return;
+        }
+
+        const geometry = buildExactSymmetricWeaveMesh({
           group: params.devExactSymmetryGroup,
           sourcePattern: params.devExactSource,
           targetPattern: params.devExactTarget,
@@ -102,22 +160,24 @@ export function KnotScene() {
             params.devExactFourth,
           ].slice(0, Math.round(params.devExactTrajectorySize)),
           transitionMode: params.devExactTransitionMode,
-          progress: params.transitionProgress,
-          samples: Math.round(params.devSampleCount),
-          crossSamples: Math.round(params.devCrossSamples),
+          progress,
+          samples: Math.max(180, Math.round(params.devSampleCount * sampleScale)),
+          crossSamples: Math.max(6, Math.round(params.devCrossSamples * crossScale)),
           width: params.devRibbonWidth,
           shellRadius: params.devShellRadius,
           shellThickness: params.devShellThickness,
           liftAmplitude: params.devLiftAmplitude,
           showWPassage: params.devShowWPassage,
-          relaxationSteps: params.devExactRelaxationSteps,
+          relaxationSteps,
           symmetrySettle: params.devExactSymmetrySettle,
           solidSolve: params.devExactSolidSolve,
-          solidPasses: params.devExactSolidPasses,
+          solidPasses,
           creaseStrength: params.devExactCreaseStrength,
         });
+        if (livePlayback) cacheExactGeometry(cacheKey, geometry);
+        setDeveloperGeometry(geometry);
       } else if (params.devCoreMode === 'spherical shell weave') {
-        developerKnot.geometry = buildSphericalWeaveRibbonMesh({
+        setDeveloperGeometry(buildSphericalWeaveRibbonMesh({
             sourcePattern: params.devShellSource,
             targetPattern: params.devShellTarget,
             progress: params.transitionProgress,
@@ -135,9 +195,9 @@ export function KnotScene() {
             physicsMode: params.devPhysicsMode,
             physicsSubsteps: params.devPhysicsSubsteps,
             physicsBend: params.devPhysicsBend,
-          });
+          }));
       } else {
-        developerKnot.geometry = buildDeveloperRibbonMesh({
+        setDeveloperGeometry(buildDeveloperRibbonMesh({
             knots: [params.devSourceKnot, params.devMidKnot, params.devTargetKnot, params.devFourthKnot].slice(0, Math.round(params.devTrajectorySize)),
             progress: params.transitionProgress,
             samples: Math.round(params.devSampleCount),
@@ -159,10 +219,8 @@ export function KnotScene() {
             hideDuringUncrossing: params.devHideDuringUncrossing,
             fourthDimensionDuty: params.devFourthDimensionDuty,
             twistTurns: params.devTwistEnabled ? params.devTwistTurns : 0,
-          });
+          }));
       }
-      old.dispose();
-      dirty = false;
     };
 
     const updateUniforms = () => {
@@ -238,6 +296,7 @@ export function KnotScene() {
     };
 
     const gui = createControlPanel(params, () => {
+      clearExactGeometryCache();
       dirty = true;
     });
 
@@ -350,6 +409,7 @@ export function KnotScene() {
       composer.dispose();
       knot.geometry.dispose();
       material.dispose();
+      clearExactGeometryCache();
       developerKnot.geometry.dispose();
       developerMaterial.dispose();
       mount.removeChild(renderer.domElement);
@@ -374,6 +434,47 @@ function pingPong(phase: number) {
 
 function inversePingPong(progress: number) {
   return Math.max(0, Math.min(0.5, progress * 0.5));
+}
+
+function quantizeProgress(progress: number, frames: number) {
+  const frameCount = Math.max(2, Math.round(frames));
+  return Math.round(clamp01Number(progress) * (frameCount - 1)) / (frameCount - 1);
+}
+
+function exactGeometryCacheKey(params: Params, progress: number, quality: number) {
+  return [
+    'exact-live',
+    params.devExactSymmetryGroup,
+    params.devExactTransitionMode,
+    params.devExactTrajectorySize,
+    params.devExactSource,
+    params.devExactTarget,
+    params.devExactThird,
+    params.devExactFourth,
+    roundKey(progress, 5),
+    roundKey(quality, 3),
+    Math.round(params.devSampleCount),
+    Math.round(params.devCrossSamples),
+    roundKey(params.devRibbonWidth, 4),
+    roundKey(params.devShellRadius, 4),
+    roundKey(params.devShellThickness, 4),
+    roundKey(params.devLiftAmplitude, 4),
+    params.devShowWPassage ? 1 : 0,
+    Math.round(params.devExactRelaxationSteps),
+    roundKey(params.devExactSymmetrySettle, 4),
+    params.devExactSolidSolve ? 1 : 0,
+    Math.round(params.devExactSolidPasses),
+    roundKey(params.devExactCreaseStrength, 4),
+  ].join('|');
+}
+
+function roundKey(value: number, digits: number) {
+  const scale = 10 ** digits;
+  return Math.round(value * scale) / scale;
+}
+
+function clamp01Number(value: number) {
+  return Math.max(0, Math.min(1, value));
 }
 
 function alignedPhase(sourceKind: KnotKind, targetKind: KnotKind, params: Params) {
