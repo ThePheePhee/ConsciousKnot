@@ -11,7 +11,7 @@ export const defaultParams: Params = {
   rotationZ: 0.02,
   autoRotate: true,
   diamondLightStrength: 2.35,
-  innerFogEnabled: true,
+  innerFogEnabled: false,
   innerFogStrength: 0.7,
   bloomStrength: 0.46,
   coreSize: 0.12,
