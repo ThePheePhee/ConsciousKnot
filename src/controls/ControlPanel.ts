@@ -1,15 +1,11 @@
 import GUI from 'lil-gui';
 import type { Params } from '../math/types';
-import { knotLabels } from '../math/knots';
 import { devKnotLabels } from '../math/devKnots';
-import { devShellPatternLabels } from '../math/sphericalWeaves';
 import { exactSymmetryGroupLabels, exactTransitionModeLabels, exactWeavePatternLabels } from '../symmetric-weave/patterns';
 
 export function createControlPanel(params: Params, onChange: () => void) {
-  const gui = new GUI({ title: '4D Knot Rearrangement', width: 340 });
-  const knots = Object.fromEntries(Object.entries(knotLabels).map(([key, value]) => [value, key]));
+  const gui = new GUI({ title: '4D Ribbon Weave', width: 340 });
   const devKnots = Object.fromEntries(Object.entries(devKnotLabels).map(([key, value]) => [value, key]));
-  const shellPatterns = Object.fromEntries(Object.entries(devShellPatternLabels).map(([key, value]) => [value, key]));
   const exactGroups = Object.fromEntries(Object.entries(exactSymmetryGroupLabels).map(([key, value]) => [value, key]));
   const exactPatterns = Object.fromEntries(Object.entries(exactWeavePatternLabels).map(([key, value]) => [value, key]));
   const exactTransitions = Object.fromEntries(Object.entries(exactTransitionModeLabels).map(([key, value]) => [value, key]));
@@ -18,7 +14,7 @@ export function createControlPanel(params: Params, onChange: () => void) {
     updateVisibility();
   };
 
-  gui.add(params, 'developerMode').name('developer mode').onChange(changed);
+  withHelp(gui.add(params, 'mainMode', ['exact symmetric shell weave', 'simple knot crossings']).name('mode').onChange(changed), 'Choose between the exact symmetric spherical weave engine and the simple inspectable knot-crossing engine.');
   gui.add(params, 'paused').name('pause');
   gui.add(params, 'globalSpeed', 0, 2, 0.001).name('speed');
   gui.add(params, 'transitionProgress', 0, 1, 0.001).name('transition').onChange(onChange);
@@ -26,106 +22,53 @@ export function createControlPanel(params: Params, onChange: () => void) {
   gui.add(params, 'autoRotate').name('auto rotate');
   gui.add(params, 'cameraZoom', 0.45, 3.5, 0.01).name('zoom');
 
-  const topology = gui.addFolder('Topology');
-  topology.add(params, 'transitionPath', ['direct spherical', 'three-step spherical', 'local crossing']).name('move').onChange(onChange);
-  topology.add(params, 'sourceKnot', knots).name('source').onChange(onChange);
-  topology.add(params, 'midKnot', knots).name('via').onChange(onChange);
-  topology.add(params, 'targetKnot', knots).name('target').onChange(onChange);
-  topology.add(params, 'phaseLockStrength', 0, 1, 0.01).name('phase lock').onChange(onChange);
-  topology.add(params, 'symmetryOrder', 3, 12, 1).name('symmetry').onChange(onChange);
+  const geometry = gui.addFolder('Shared Geometry');
+  withHelp(geometry.add(params, 'sampleCount', 160, 1400, 1).name('samples').onFinishChange(onChange), 'Centerline sample budget for the active mode. Higher values improve geometric smoothness and collision fidelity, at greater rebuild cost.');
+  withHelp(geometry.add(params, 'crossSamples', 6, 32, 1).name('ribbon samples').onFinishChange(onChange), 'Samples across each ribbon width. Higher values smooth the ribbon surface across its fibres.');
+  withHelp(geometry.add(params, 'ribbonWidth', 0.025, 0.2, 0.005).name('ribbon width').onChange(onChange), 'Physical ribbon width used by both modes. Wider ribbons require more collision work and more shell depth.');
+  withHelp(geometry.add(params, 'liftAmplitude', 0, 2.4, 0.01).name('4D lift').onChange(onChange), 'Magnitude of the compact W-axis passage used when crossings must happen outside ordinary 3-space.');
+  withHelp(geometry.add(params, 'showWPassage').name('show W passage').onChange(onChange), 'When enabled, W-active sections remain visible as red ghostly material. When disabled, those sections disappear from the 3D projection.');
 
-  const developerRoot = gui.addFolder('Developer Mode');
-  withHelp(developerRoot.add(params, 'devCoreMode', ['exact symmetric shell weave', 'spherical shell weave', 'legacy knot curve']).name('core').onChange(changed), 'Choose the mathematical core used in developer mode. Exact symmetric shell weave is the clean-room engine: finite symmetry first, declared crossing orbits, and no ad-hoc W excursions.');
+  const exact = gui.addFolder('Exact Symmetric Shell');
+  withHelp(exact.add(params, 'exactSymmetryGroup', exactGroups).name('symmetry group').onChange(onChange), 'Finite dihedral group used to replicate every ribbon motif. The whole object is generated as group orbits, so symmetry is exact as a set.');
+  withHelp(exact.add(params, 'exactTrajectorySize', 2, 4, 1).name('trajectory weaves').onChange(onChange), 'Number of exact weave states in the cycle. Three or four creates a longer smooth path through the next selected symmetric states.');
+  withHelp(exact.add(params, 'exactSource', exactPatterns).name('weave 1').onChange(onChange), 'Starting symmetric weave family.');
+  withHelp(exact.add(params, 'exactTarget', exactPatterns).name('weave 2').onChange(onChange), 'Second symmetric weave family. With trajectory weaves set to 2, this is the target.');
+  withHelp(exact.add(params, 'exactThird', exactPatterns).name('weave 3').onChange(onChange), 'Third symmetric weave family used when trajectory weaves is set to 3 or 4.');
+  withHelp(exact.add(params, 'exactFourth', exactPatterns).name('weave 4').onChange(onChange), 'Fourth symmetric weave family used by the longest exact weave trajectory.');
+  withHelp(exact.add(params, 'exactTransitionMode', exactTransitions).name('crossing schedule').onChange(onChange), 'How W passages are scheduled. Orbit crossings preserves exact symmetry by moving whole crossing orbits; local study intentionally breaks symmetry to inspect one neighborhood.');
+  withHelp(exact.add(params, 'shellRadius', 0.9, 1.9, 0.005).name('shell radius').onChange(onChange), 'Mean radius of the symmetric spherical shell.');
+  withHelp(exact.add(params, 'shellThickness', 0.18, 0.72, 0.005).name('shell depth').onChange(onChange), 'Radial layer depth used for over-under separation in ordinary 3D space.');
+  withHelp(exact.add(params, 'exactRelaxationSteps', 0, 8, 1).name('relax steps').onFinishChange(onChange), 'Equivariant local smoothing applied inside each generated orbit. It smooths without creating W or changing crossing schedules.');
+  withHelp(exact.add(params, 'exactSymmetrySettle', 0, 1, 0.01).name('symmetry settle').onChange(onChange), 'Projects the relaxed weave back toward its exact rotational orbit structure after collision solving. Higher values favor cleaner symmetric states; lower values leave more local material freedom.');
+  withHelp(exact.add(params, 'exactSolidSolve').name('solid fibres').onChange(onChange), 'Runs a material-style solid-contact solve. Ribbon lanes are treated as finite-width fibres that crease and slide instead of passing through each other.');
+  withHelp(exact.add(params, 'exactSolidPasses', 0, 12, 1).name('solid passes').onFinishChange(onChange), 'Number of solid-contact constraint passes. Higher values catch more 3D self-intersections and wide-ribbon contacts, but cost more rebuild time.');
+  withHelp(exact.add(params, 'exactCreaseStrength', 0, 1, 0.01).name('crease response').onChange(onChange), 'How strongly contact pushes spread into neighboring samples as visible creases. Higher values make collisions resolve through bends rather than sharp local overlaps.');
+  withHelp(exact.add(params, 'adaptivePlayback').name('adaptive playback').onChange(onChange), 'When enabled, animated playback uses a lighter cached solve while paused inspection and scrubbing still use the full solid-fibre settings.');
+  withHelp(exact.add(params, 'playbackQuality', 0.15, 1, 0.01).name('live quality').onChange(onChange), 'Quality budget for moving playback. Higher values use more samples and contact passes while running; lower values prioritize continuous motion.');
+  withHelp(exact.add(params, 'playbackCacheFrames', 24, 180, 1).name('cache frames').onFinishChange(onChange), 'Number of transition positions used for cached live playback. Higher values are more temporally precise; lower values reuse solved frames more often.');
 
-  const exactDeveloper = gui.addFolder('Exact Symmetric Developer');
-  withHelp(exactDeveloper.add(params, 'devExactSymmetryGroup', exactGroups).name('symmetry group').onChange(onChange), 'Finite dihedral group used to replicate every ribbon motif. The whole object is generated as group orbits, so symmetry is exact as a set.');
-  withHelp(exactDeveloper.add(params, 'devExactTrajectorySize', 2, 4, 1).name('trajectory weaves').onChange(onChange), 'Number of exact weave states in the cycle. Two gives the old source-to-target behavior; three or four creates a longer smooth path through the next selected symmetric states.');
-  withHelp(exactDeveloper.add(params, 'devExactSource', exactPatterns).name('weave 1').onChange(onChange), 'Starting symmetric weave family. These are clean-room orbit patterns, separate from the older parametric shell curves.');
-  withHelp(exactDeveloper.add(params, 'devExactTarget', exactPatterns).name('weave 2').onChange(onChange), 'Second symmetric weave family. With trajectory weaves set to 2, this is the target.');
-  withHelp(exactDeveloper.add(params, 'devExactThird', exactPatterns).name('weave 3').onChange(onChange), 'Third symmetric weave family used when trajectory weaves is set to 3 or 4.');
-  withHelp(exactDeveloper.add(params, 'devExactFourth', exactPatterns).name('weave 4').onChange(onChange), 'Fourth symmetric weave family used by the longest exact weave trajectory.');
-  withHelp(exactDeveloper.add(params, 'devExactTransitionMode', exactTransitions).name('crossing schedule').onChange(onChange), 'How W passages are scheduled. Orbit crossings preserves exact symmetry by moving whole crossing orbits; local study intentionally breaks symmetry to inspect one neighborhood.');
-  withHelp(exactDeveloper.add(params, 'transitionProgress', 0, 1, 0.0005).name('scrub').onChange(onChange), 'Scrub the exact symmetric transition. W appears only in declared crossing-orbit windows, not from relaxation or ribbon twist.');
-  withHelp(exactDeveloper.add(params, 'devSampleCount', 240, 1200, 1).name('samples').onFinishChange(onChange), 'Approximate sample budget distributed across all replicated ribbon orbits.');
-  withHelp(exactDeveloper.add(params, 'devCrossSamples', 8, 32, 1).name('ribbon samples').onFinishChange(onChange), 'Samples across each ribbon width.');
-  withHelp(exactDeveloper.add(params, 'devRibbonWidth', 0.025, 0.16, 0.005).name('ribbon width').onChange(onChange), 'Physical ribbon width. This first exact engine is conservative: wider ribbons need larger shell depth and simpler groups.');
-  withHelp(exactDeveloper.add(params, 'devShellRadius', 0.9, 1.9, 0.005).name('shell radius').onChange(onChange), 'Mean radius of the symmetric spherical shell.');
-  withHelp(exactDeveloper.add(params, 'devShellThickness', 0.18, 0.72, 0.005).name('shell depth').onChange(onChange), 'Radial layer depth used for over-under separation in ordinary 3D space.');
-  withHelp(exactDeveloper.add(params, 'devLiftAmplitude', 0, 2.4, 0.01).name('4D lift').onChange(onChange), 'Enables compact W passages at declared crossing orbit events. Setting this to zero keeps all geometry in ordinary 3D.');
-  withHelp(exactDeveloper.add(params, 'devShowWPassage').name('show W passage').onChange(onChange), 'When enabled, W-active sections are red and ghostly. When disabled, W-active ribbon sections disappear so no projected 3D self-intersection is shown.');
-  withHelp(exactDeveloper.add(params, 'devExactRelaxationSteps', 0, 8, 1).name('relax steps').onFinishChange(onChange), 'Equivariant local smoothing applied inside each generated orbit. It smooths without creating W or changing crossing schedules.');
-  withHelp(exactDeveloper.add(params, 'devExactSymmetrySettle', 0, 1, 0.01).name('symmetry settle').onChange(onChange), 'Projects the relaxed weave back toward its exact rotational orbit structure after collision solving. Higher values favor cleaner symmetric states; lower values leave more local material freedom.');
-  withHelp(exactDeveloper.add(params, 'devExactSolidSolve').name('solid fibres').onChange(onChange), 'Runs a material-style solid-contact solve after the first geometric relaxation. This treats ribbon lanes as finite-width fibres that crease and slide instead of passing through each other.');
-  withHelp(exactDeveloper.add(params, 'devExactSolidPasses', 0, 12, 1).name('solid passes').onFinishChange(onChange), 'Number of solid-contact constraint passes. Higher values catch more 3D self-intersections and wide-ribbon contacts, but cost more rebuild time.');
-  withHelp(exactDeveloper.add(params, 'devExactCreaseStrength', 0, 1, 0.01).name('crease response').onChange(onChange), 'How strongly contact pushes are spread into neighboring samples as visible creases. Higher values make collisions resolve through bends rather than sharp local overlaps.');
-  withHelp(exactDeveloper.add(params, 'devAdaptivePlayback').name('adaptive playback').onChange(onChange), 'When enabled, animated playback uses a lighter cached solve while paused inspection and scrubbing still use the full solid-fibre settings.');
-  withHelp(exactDeveloper.add(params, 'devPlaybackQuality', 0.15, 1, 0.01).name('live quality').onChange(onChange), 'Quality budget for moving playback. Higher values use more samples and contact passes while running; lower values prioritize continuous motion.');
-  withHelp(exactDeveloper.add(params, 'devPlaybackCacheFrames', 24, 180, 1).name('cache frames').onFinishChange(onChange), 'Number of transition positions used for cached live playback. Higher values are more temporally precise; lower values reuse solved frames more often.');
-
-  const shellDeveloper = gui.addFolder('Spherical Shell Developer');
-  withHelp(shellDeveloper.add(params, 'devShellSource', shellPatterns).name('source shell').onChange(onChange), 'Starting spherical-shell diagram. These are realized in S2 x I, using radial height for over/under information rather than flattening onto one sphere.');
-  withHelp(shellDeveloper.add(params, 'devShellTarget', shellPatterns).name('target shell').onChange(onChange), 'Target spherical-shell diagram for the transition.');
-  withHelp(shellDeveloper.add(params, 'transitionProgress', 0, 1, 0.0005).name('scrub').onChange(onChange), 'Scrub the shell-native transition. Stable endpoints have W equal to zero; middle frames mark compact fourth-dimensional crossing-change neighborhoods.');
-  withHelp(shellDeveloper.add(params, 'devSampleCount', 240, 1200, 1).name('samples').onFinishChange(onChange), 'Centerline samples used by the shell embedding and self-avoidance pass.');
-  withHelp(shellDeveloper.add(params, 'devCrossSamples', 8, 32, 1).name('ribbon samples').onFinishChange(onChange), 'Samples across the ribbon width.');
-  withHelp(shellDeveloper.add(params, 'devRibbonWidth', 0.025, 0.22, 0.005).name('ribbon width').onChange(onChange), 'Physical ribbon width. The shell solver switches to denser surface-lane avoidance as this gets wider, so broad ribbon sheets are separated rather than just their centerlines.');
-  withHelp(shellDeveloper.add(params, 'devShellRadius', 0.9, 1.9, 0.005).name('shell radius').onChange(onChange), 'Mean radius of the spherical shell.');
-  withHelp(shellDeveloper.add(params, 'devShellThickness', 0.12, 0.7, 0.005).name('shell depth').onChange(onChange), 'Available radial depth for over/under weaving inside S2 x I.');
-  withHelp(shellDeveloper.add(params, 'devLiftAmplitude', 0, 2.4, 0.01).name('4D lift').onChange(onChange), 'Diagnostic W lift for compact crossing-change neighborhoods during shell-diagram transitions.');
-  withHelp(shellDeveloper.add(params, 'devShowWPassage').name('show W passage').onChange(onChange), 'When enabled, the compact W neighborhoods turn red and fade with W depth. Stable shell states should not show red.');
-  withHelp(shellDeveloper.add(params, 'devSelfAvoidanceStrength', 0, 1, 0.01).name('avoid strength').onChange(onChange), 'Strength of the constrained shell solver. It alternates elastic relaxation toward a lower-energy symmetric curve with tube-thickness separation for visible 3D ribbon branches.');
-  withHelp(shellDeveloper.add(params, 'devSelfAvoidanceIterations', 0, 16, 1).name('avoid passes').onFinishChange(onChange), 'Number of relaxation/separation passes. Higher values better remove tight contacts in dense shell weaves, at greater rebuild cost.');
-  withHelp(shellDeveloper.add(params, 'devTubeClearance', 1.2, 7.5, 0.05).name('tube clearance').onChange(onChange), 'Minimum centerline clearance in ribbon-width units for visible 3D branches. W-active crossing neighborhoods are exempt while they are outside ordinary 3-space.');
-  withHelp(shellDeveloper.add(params, 'devSphereSymmetry', 2, 16, 1).name('forced symmetry').onChange(onChange), 'Symmetry order used by the high-width footprint solver when choosing curl directions around hard contacts. Higher values encourage more repeated, mandala-like conflict resolutions.');
-  withHelp(shellDeveloper.add(params, 'devPhysicsMode').name('physics solve').onChange(onChange), 'Switches the shell embedding to a small position-based dynamics solve: stretch, bend, shell adherence, and ribbon-footprint collision constraints are iterated together so folds behave more like elastic material.');
-  withHelp(shellDeveloper.add(params, 'devPhysicsSubsteps', 2, 14, 1).name('physics steps').onFinishChange(onChange), 'Number of material-constraint iterations used by the physics solve. Higher values resolve tight contacts and folding singularities better, but rebuild more slowly.');
-  withHelp(shellDeveloper.add(params, 'devPhysicsBend', 0, 1, 0.01).name('bend stiffness').onChange(onChange), 'How strongly the physics solve resists sharp local folds. Higher values make broader curls; lower values allow tighter crumples.');
-
-  const legacyDeveloper = gui.addFolder('Legacy Curve Developer');
-  withHelp(legacyDeveloper.add(params, 'devTrajectorySize', 1, 4, 1).name('trajectory knots').onChange(onChange), 'How many knots are used in the legacy developer-mode path. A value of 2 means knot 1 goes directly to knot 2; higher values include the next selected knots as intermediate embeddings.');
-  withHelp(legacyDeveloper.add(params, 'devSourceKnot', devKnots).name('knot 1').onChange(onChange), 'The initial embedded 3D knot in the transition trajectory.');
-  withHelp(legacyDeveloper.add(params, 'devMidKnot', devKnots).name('knot 2').onChange(onChange), 'The second knot in the trajectory. With trajectory knots set to 2, this is the target knot.');
-  withHelp(legacyDeveloper.add(params, 'devTargetKnot', devKnots).name('knot 3').onChange(onChange), 'The third knot in a three- or four-step trajectory.');
-  withHelp(legacyDeveloper.add(params, 'devFourthKnot', devKnots).name('knot 4').onChange(onChange), 'The fourth knot in the longest developer trajectory.');
-  withHelp(legacyDeveloper.add(params, 'transitionProgress', 0, 1, 0.0005).name('paused scrub').onChange(onChange), 'When paused, use this to scrub backward and forward through the transition for frame-by-frame inspection.');
-  withHelp(legacyDeveloper.add(params, 'devSampleCount', 160, 1400, 1).name('samples').onFinishChange(onChange), 'Number of samples along the closed knot centerline. Higher values make smoother curves and more accurate crossings, but cost more CPU/GPU upload time in developer mode.');
-  withHelp(legacyDeveloper.add(params, 'devCrossSamples', 6, 32, 1).name('ribbon samples').onFinishChange(onChange), 'Number of samples across the ribbon width. Higher values make the ribbon surface smoother across its width.');
-  withHelp(legacyDeveloper.add(params, 'devRibbonWidth', 0.02, 0.2, 0.005).name('ribbon width').onChange(onChange), 'Physical width of the inspectable ribbon around the knot centerline.');
-  withHelp(legacyDeveloper.add(params, 'devLiftAmplitude', 0, 2.4, 0.01).name('4D lift').onChange(onChange), 'Maximum W-axis displacement during a crossing move. In hidden 4D passage mode, this is the actual fourth-dimensional excursion that separates strands without a 3D self-intersection.');
-  withHelp(legacyDeveloper.add(params, 'devSimultaneousUncrossings', 1, 5, 1).name('parallel crossings').onChange(onChange), 'How many localized crossing windows are allowed at the same time along the ribbon. Lower values isolate one move; higher values show multiple W-axis passages in parallel.');
-  withHelp(legacyDeveloper.add(params, 'devCrossingMode', ['projected intersections', 'hidden 4D passage']).name('crossing view').onChange(onChange), 'Projected intersections keeps W equal to zero so you can inspect the 3D self-intersection. Hidden 4D passage performs the crossing by lifting localized strands into the fourth dimension.');
-  withHelp(legacyDeveloper.add(params, 'devShowWPassage').name('show W passage').onChange(onChange), 'When enabled, ribbon sections with nonzero W remain visible, turn red, and become more translucent as their fourth-dimensional displacement increases.');
-  withHelp(legacyDeveloper.add(params, 'devSphereMode', ['off', 'contain ball', 'radial shell', 'symmetric shell']).name('sphere mode').onChange(onChange), 'Constrains the developer knot toward a spherical envelope. Contain ball only prevents escape; radial shell pulls toward a round sphere; symmetric shell adds a low-amplitude symmetric shell modulation.');
-  withHelp(legacyDeveloper.add(params, 'devSphereStrength', 0, 1, 0.001).name('sphere strength').onChange(onChange), 'Blend strength for the spherical envelope. Use 0 for raw knot validation and 1 for maximum shell conformance.');
-  withHelp(legacyDeveloper.add(params, 'devSphereRadius', 0.8, 2.4, 0.005).name('sphere radius').onChange(onChange), 'Target radius of the developer-mode spherical envelope.');
-  withHelp(legacyDeveloper.add(params, 'devSphereSymmetry', 3, 12, 1).name('sphere symmetry').onChange(onChange), 'Symmetry order used by the symmetric shell mode to distribute folds around the sphere.');
-  withHelp(legacyDeveloper.add(params, 'devSelfAvoidance').name('self avoid').onChange(onChange), 'Keeps non-neighboring parts of the developer ribbon separated after knot morphing and spherical shell projection. This is a tube-thickness relaxation, not just a visual offset.');
-  withHelp(legacyDeveloper.add(params, 'devSelfAvoidanceStrength', 0, 1, 0.01).name('avoid strength').onChange(onChange), 'How strongly the self-avoidance relaxation pushes apart distant parts of the ribbon when they get closer than the tube clearance.');
-  withHelp(legacyDeveloper.add(params, 'devSelfAvoidanceIterations', 0, 10, 1).name('avoid passes').onFinishChange(onChange), 'Number of self-avoidance solver passes. More passes catch harder shell-compression conflicts but cost more CPU when the developer mesh rebuilds.');
-  withHelp(legacyDeveloper.add(params, 'devTubeClearance', 1.2, 5.5, 0.05).name('tube clearance').onChange(onChange), 'Minimum centerline separation in multiples of ribbon width. Larger values make intersections less likely but may fight tight spherical packing.');
-  withHelp(legacyDeveloper.add(params, 'devHideDuringUncrossing', 0, 1, 0.01).name('hide passage').onChange(onChange), 'How much the ribbon narrows during the localized 4D passage. This is only a visual cue; the mathematical W excursion is controlled by 4D lift.');
-  withHelp(legacyDeveloper.add(params, 'devFourthDimensionDuty', 0.005, 0.25, 0.001).name('4D duty').onChange(onChange), 'Temporal width of the W-axis crossing window. Low values make brief excursions; higher values keep the crossing in 4D for a larger fraction of the transition.');
-  withHelp(legacyDeveloper.add(params, 'devTwistEnabled').name('twisted ribbon').onChange(onChange), 'Toggles framing twist on the ribbon. This rotates the ribbon frame around the 3D centerline; it should not move the knot centerline into W.');
-  withHelp(legacyDeveloper.add(params, 'devTwistTurns', -12, 12, 1).name('twist turns').onChange(onChange), 'Integer number of full rotations applied to the ribbon framing around the centerline.');
-
-  const confinement = gui.addFolder('Spherical Confinement');
-  confinement.add(params, 'confineProjectedSphere').name('3D sphere').onChange(onChange);
-  confinement.add(params, 'confine4DSphere').name('4D sphere').onChange(onChange);
-  confinement.add(params, 'sphereTightness', 0.65, 1, 0.01).name('sphere tightness').onChange(onChange);
-  confinement.add(params, 'liftAmplitude', 0.15, 1.6, 0.01).name('4D lift').onChange(onChange);
-  confinement.add(params, 'liftFrequency', 3, 16, 1).name('lift waves').onChange(onChange);
-  confinement.add(params, 'ribbonWidth', 0.07, 0.24, 0.005).name('ribbon width').onChange(onChange);
-
-  const density = gui.addFolder('Occluding Weave');
-  density.add(params, 'denseProjection').name('dense mode').onChange(onChange);
-  density.add(params, 'densityPasses', 1, 7, 1).name('passes').onFinishChange(onChange);
-  density.add(params, 'densityPhaseSpread', 0, 1, 0.01).name('spread').onChange(onChange);
-
-  const local = gui.addFolder('Local Crossing Study');
-  local.add(params, 'localCrossingCenter', 0, 1, 0.001).name('center').onChange(onChange);
-  local.add(params, 'localCrossingWidth', 0.03, 0.24, 0.001).name('width').onChange(onChange);
-  local.add(params, 'localCrossingStrength', 0, 1.6, 0.01).name('strength').onChange(onChange);
-  local.add(params, 'localFocusZoom', 0, 1, 0.01).name('focus').onChange(onChange);
+  const simple = gui.addFolder('Simple Knot Crossings');
+  withHelp(simple.add(params, 'simpleTrajectorySize', 1, 4, 1).name('trajectory knots').onChange(onChange), 'How many knots are used in the simple crossing path. A value of 2 means knot 1 goes directly to knot 2; higher values include the next selected knots as intermediate embeddings.');
+  withHelp(simple.add(params, 'simpleSourceKnot', devKnots).name('knot 1').onChange(onChange), 'Initial embedded 3D knot in the transition trajectory.');
+  withHelp(simple.add(params, 'simpleMidKnot', devKnots).name('knot 2').onChange(onChange), 'Second knot in the trajectory. With trajectory knots set to 2, this is the target knot.');
+  withHelp(simple.add(params, 'simpleTargetKnot', devKnots).name('knot 3').onChange(onChange), 'Third knot in a three- or four-step trajectory.');
+  withHelp(simple.add(params, 'simpleFourthKnot', devKnots).name('knot 4').onChange(onChange), 'Fourth knot in the longest simple trajectory.');
+  withHelp(simple.add(params, 'simpleSimultaneousUncrossings', 1, 5, 1).name('parallel crossings').onChange(onChange), 'How many localized crossing windows are allowed at the same time. Lower values isolate one move; higher values show multiple W-axis passages in parallel.');
+  withHelp(simple.add(params, 'simpleCrossingMode', ['projected intersections', 'hidden 4D passage']).name('crossing view').onChange(onChange), 'Projected intersections keeps W equal to zero for validation. Hidden 4D passage performs the crossing by lifting localized strands into the fourth dimension.');
+  withHelp(simple.add(params, 'simpleSphereMode', ['off', 'contain ball', 'radial shell', 'symmetric shell']).name('sphere mode').onChange(onChange), 'Constrains the simple knot toward a spherical envelope. Use off for raw knot validation; use shell modes to study spherical packing.');
+  withHelp(simple.add(params, 'simpleSphereStrength', 0, 1, 0.001).name('sphere strength').onChange(onChange), 'Blend strength for the spherical envelope.');
+  withHelp(simple.add(params, 'simpleSphereRadius', 0.8, 2.4, 0.005).name('sphere radius').onChange(onChange), 'Target radius of the simple-mode spherical envelope.');
+  withHelp(simple.add(params, 'simpleSphereSymmetry', 3, 12, 1).name('sphere symmetry').onChange(onChange), 'Symmetry order used by the simple symmetric shell mode to distribute folds around the sphere.');
+  withHelp(simple.add(params, 'simpleSelfAvoidance').name('self avoid').onChange(onChange), 'Keeps non-neighboring parts of the simple ribbon separated after knot morphing and shell projection.');
+  withHelp(simple.add(params, 'simpleSelfAvoidanceStrength', 0, 1, 0.01).name('avoid strength').onChange(onChange), 'How strongly self-avoidance pushes apart distant parts of the ribbon when they get closer than tube clearance.');
+  withHelp(simple.add(params, 'simpleSelfAvoidanceIterations', 0, 10, 1).name('avoid passes').onFinishChange(onChange), 'Number of self-avoidance solver passes.');
+  withHelp(simple.add(params, 'simpleTubeClearance', 1.2, 5.5, 0.05).name('tube clearance').onChange(onChange), 'Minimum centerline separation in multiples of ribbon width.');
+  withHelp(simple.add(params, 'simpleProjectionDistance4D', 2.4, 8, 0.01).name('4D projection').onChange(onChange), 'Projection distance used when simple crossing passages move through W.');
+  withHelp(simple.add(params, 'simpleHideDuringUncrossing', 0, 1, 0.01).name('hide passage').onChange(onChange), 'How much the ribbon narrows during the localized 4D passage. This is a visual cue; the mathematical W excursion is controlled by 4D lift.');
+  withHelp(simple.add(params, 'simpleFourthDimensionDuty', 0.005, 0.25, 0.001).name('4D duty').onChange(onChange), 'Temporal width of the W-axis crossing window. Low values make brief excursions; higher values keep the crossing in 4D for a larger fraction of the transition.');
+  withHelp(simple.add(params, 'simpleTwistEnabled').name('twisted ribbon').onChange(onChange), 'Toggles framing twist on the ribbon. This rotates the ribbon frame around the 3D centerline; it should not move the knot centerline into W.');
+  withHelp(simple.add(params, 'simpleTwistTurns', -12, 12, 1).name('twist turns').onChange(onChange), 'Integer number of full rotations applied to the ribbon framing around the centerline.');
 
   const presentation = gui.addFolder('Presentation');
   presentation.add(params, 'rotationX', -0.18, 0.18, 0.001).name('tilt drift');
@@ -140,13 +83,9 @@ export function createControlPanel(params: Params, onChange: () => void) {
   surface.add(params, 'fibreDensity', 10, 180, 1).name('fibre density');
   surface.add(params, 'fibreStrength', 0, 1.5, 0.01).name('fibre strength');
 
-  const productionFolders = [topology, confinement, density, local];
   function updateVisibility() {
-    for (const folder of productionFolders) folder.domElement.style.display = params.developerMode ? 'none' : '';
-    developerRoot.domElement.style.display = params.developerMode ? '' : 'none';
-    exactDeveloper.domElement.style.display = params.developerMode && params.devCoreMode === 'exact symmetric shell weave' ? '' : 'none';
-    shellDeveloper.domElement.style.display = params.developerMode && params.devCoreMode === 'spherical shell weave' ? '' : 'none';
-    legacyDeveloper.domElement.style.display = params.developerMode && params.devCoreMode === 'legacy knot curve' ? '' : 'none';
+    exact.domElement.style.display = params.mainMode === 'exact symmetric shell weave' ? '' : 'none';
+    simple.domElement.style.display = params.mainMode === 'simple knot crossings' ? '' : 'none';
   }
   updateVisibility();
   return gui;
