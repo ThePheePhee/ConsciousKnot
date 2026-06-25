@@ -19,6 +19,7 @@ export function createControlPanel(params: Params, onChange: () => void) {
   gui.add(params, 'globalSpeed', 0, 2, 0.001).name('speed');
   gui.add(params, 'transitionProgress', 0, 1, 0.001).name('transition').onChange(onChange);
   gui.add(params, 'autoTransitionSpeed', 0, 1, 0.001).name('auto cycle');
+  withHelp(gui.add(params, 'showWPassage').name('show W passage').onChange(onChange), 'When enabled, W-active sections remain visible as red ghostly material. When disabled, those sections disappear from the 3D projection.');
   gui.add(params, 'autoRotate').name('auto rotate');
   gui.add(params, 'cameraZoom', 0.45, 3.5, 0.01).name('zoom');
 
@@ -27,7 +28,6 @@ export function createControlPanel(params: Params, onChange: () => void) {
   withHelp(geometry.add(params, 'crossSamples', 6, 32, 1).name('ribbon samples').onFinishChange(onChange), 'Samples across each ribbon width. Higher values smooth the ribbon surface across its fibres.');
   withHelp(geometry.add(params, 'ribbonWidth', 0.025, 0.2, 0.005).name('ribbon width').onChange(onChange), 'Physical ribbon width used by both modes. Wider ribbons require more collision work and more shell depth.');
   withHelp(geometry.add(params, 'liftAmplitude', 0, 2.4, 0.01).name('4D lift').onChange(onChange), 'Magnitude of the compact W-axis passage used when crossings must happen outside ordinary 3-space.');
-  withHelp(geometry.add(params, 'showWPassage').name('show W passage').onChange(onChange), 'When enabled, W-active sections remain visible as red ghostly material. When disabled, those sections disappear from the 3D projection.');
 
   const exact = gui.addFolder('Exact Symmetric Shell');
   withHelp(exact.add(params, 'exactSymmetryGroup', exactGroups).name('symmetry group').onChange(onChange), 'Finite dihedral group used to replicate every ribbon motif. The whole object is generated as group orbits, so symmetry is exact as a set.');

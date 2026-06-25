@@ -64,8 +64,9 @@ export function KnotScene() {
     core.visible = false;
     interactionRig.add(core);
     const innerFog = createInnerFog(1);
-    innerFog.renderOrder = -1;
-    interactionRig.add(innerFog);
+    innerFog.renderOrder = 20;
+    innerFog.frustumCulled = false;
+    scene.add(innerFog);
     const sparkleMaterial = new MeshBasicMaterial({ color: 0xeef8ff, transparent: true, opacity: 0.48, blending: AdditiveBlending });
     const sparkles = Array.from({ length: 6 }, (_, i) => {
       const s = new Mesh(new SphereGeometry(0.012, 12, 8), sparkleMaterial);
@@ -212,12 +213,7 @@ export function KnotScene() {
       fogMaterial.uniforms.intensity.value = params.innerFogEnabled ? params.innerFogStrength : 0;
       fogMaterial.uniforms.lightStrength.value = params.diamondLightStrength;
       fogMaterial.uniforms.corePosition.value = core.position;
-      const fogRadius = params.mainMode === 'exact symmetric shell weave'
-        ? params.shellRadius + params.shellThickness * 0.55
-        : params.simpleSphereMode === 'off'
-        ? 1.42
-        : params.simpleSphereRadius * 1.08;
-      innerFog.scale.setScalar(fogRadius);
+      innerFog.scale.setScalar(28);
       innerFog.visible = params.innerFogEnabled && params.innerFogStrength > 0.001;
     };
 
