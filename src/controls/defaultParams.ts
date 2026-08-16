@@ -26,6 +26,7 @@ export const defaultParams: Params = {
   showWPassage: false,
   cameraOrbit: 0.035,
   cameraZoom: 1.0,
+  productionWeavePreset: 'reference triad',
   mainMode: 'exact symmetric shell weave',
   exactSymmetryGroup: 'D6',
   exactTrajectorySize: 3,

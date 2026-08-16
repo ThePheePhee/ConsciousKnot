@@ -12,6 +12,7 @@ export function createClassicRibbonMaterial(params: Params) {
     depthWrite: true,
     uniforms: {
       time: { value: 0 },
+      morphAlpha: { value: 0 },
       oilSlickStrength: { value: params.oilSlickStrength },
       fractalStrength: { value: params.fractalStrength },
       fibreDensity: { value: params.fibreDensity },

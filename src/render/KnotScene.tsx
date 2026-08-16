@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import {
   AdditiveBlending,
+  BufferAttribute,
   BufferGeometry,
   Color,
   Group,
@@ -31,6 +32,7 @@ export function KnotScene() {
     let dirty = true;
     let time = 0;
     let transitionClock = params.transitionProgress;
+    let exactMorphAlpha = 0;
     let dragging = false;
 
     const scene = new Scene();
@@ -120,11 +122,54 @@ export function KnotScene() {
       const solidPasses = params.exactSolidSolve && params.exactSolidPasses > 0
         ? Math.max(livePlayback ? 1 : 0, Math.round(params.exactSolidPasses * solidScale))
         : 0;
-      const progress = livePlayback
-        ? quantizeProgress(params.transitionProgress, Math.round(params.playbackCacheFrames))
-        : params.transitionProgress;
-      const cacheKey = livePlayback ? exactGeometryCacheKey(params, progress, quality) : '';
-      const cached = livePlayback ? exactGeometryCache.get(cacheKey) : undefined;
+      if (livePlayback) {
+        const frame = exactFrameBlend(params.transitionProgress, Math.round(params.playbackCacheFrames));
+        const base = getCachedExactGeometry(frame.baseProgress, quality, sampleScale, crossScale, relaxationSteps, solidPasses);
+        const next = getCachedExactGeometry(frame.nextProgress, quality, sampleScale, crossScale, relaxationSteps, solidPasses);
+        exactMorphAlpha = attachMorphTargetAttributes(base, next) ? frame.alpha : 0;
+        return base;
+      }
+
+      exactMorphAlpha = 0;
+      const geometry = buildExactSymmetricWeaveMesh({
+        group: params.exactSymmetryGroup,
+        sourcePattern: params.exactSource,
+        targetPattern: params.exactTarget,
+        trajectoryPatterns: [
+          params.exactSource,
+          params.exactTarget,
+          params.exactThird,
+          params.exactFourth,
+        ].slice(0, Math.round(params.exactTrajectorySize)),
+        transitionMode: params.exactTransitionMode,
+        progress: params.transitionProgress,
+        samples: Math.max(180, Math.round(params.sampleCount * sampleScale)),
+        crossSamples: Math.max(6, Math.round(params.crossSamples * crossScale)),
+        width: params.ribbonWidth,
+        shellRadius: params.shellRadius,
+        shellThickness: params.shellThickness,
+        liftAmplitude: params.liftAmplitude,
+        showWPassage: params.showWPassage,
+        relaxationSteps,
+        symmetrySettle: params.exactSymmetrySettle,
+        solidSolve: params.exactSolidSolve,
+        solidPasses,
+        creaseStrength: params.exactCreaseStrength,
+      });
+      attachMorphTargetAttributes(geometry, geometry);
+      return geometry;
+    };
+
+    const getCachedExactGeometry = (
+      progress: number,
+      quality: number,
+      sampleScale: number,
+      crossScale: number,
+      relaxationSteps: number,
+      solidPasses: number,
+    ) => {
+      const cacheKey = exactGeometryCacheKey(params, progress, quality);
+      const cached = exactGeometryCache.get(cacheKey);
       if (cached) {
         exactGeometryCache.delete(cacheKey);
         exactGeometryCache.set(cacheKey, cached);
@@ -156,7 +201,8 @@ export function KnotScene() {
         solidPasses,
         creaseStrength: params.exactCreaseStrength,
       });
-      if (livePlayback) cacheExactGeometry(cacheKey, geometry);
+      attachMorphTargetAttributes(geometry, geometry);
+      cacheExactGeometry(cacheKey, geometry);
       return geometry;
     };
 
@@ -167,6 +213,7 @@ export function KnotScene() {
     const updateUniforms = () => {
       const uniforms = material.uniforms;
       uniforms.time.value = time * 0.35;
+      uniforms.morphAlpha.value = exactMorphAlpha;
       uniforms.oilSlickStrength.value = params.oilSlickStrength;
       uniforms.fractalStrength.value = params.fractalStrength;
       uniforms.fibreDensity.value = params.fibreDensity;
@@ -298,7 +345,7 @@ export function KnotScene() {
   return (
     <>
       <div className="brand">
-        <h1>Thing Replication: Knot of Consciousness</h1>
+        <h1>Replication: Knot of Consciousness</h1>
         <p>A luminous 4D spherical ribbon weave, cycling through smooth impossible crossings.</p>
       </div>
       <div ref={mountRef} style={{ width: '100vw', height: '100vh' }} />
@@ -315,9 +362,42 @@ function inversePingPong(progress: number) {
   return Math.max(0, Math.min(0.5, progress * 0.5));
 }
 
-function quantizeProgress(progress: number, frames: number) {
+function exactFrameBlend(progress: number, frames: number) {
   const frameCount = Math.max(2, Math.round(frames));
-  return Math.round(clamp01Number(progress) * (frameCount - 1)) / (frameCount - 1);
+  const scaled = clamp01Number(progress) * (frameCount - 1);
+  const baseIndex = Math.min(frameCount - 1, Math.floor(scaled));
+  const nextIndex = Math.min(frameCount - 1, baseIndex + 1);
+  return {
+    baseProgress: baseIndex / (frameCount - 1),
+    nextProgress: nextIndex / (frameCount - 1),
+    alpha: nextIndex === baseIndex ? 0 : scaled - baseIndex,
+  };
+}
+
+function attachMorphTargetAttributes(geometry: BufferGeometry, nextGeometry: BufferGeometry) {
+  const position = geometry.getAttribute('position') as BufferAttribute | undefined;
+  const normal = geometry.getAttribute('normal') as BufferAttribute | undefined;
+  const wIntensity = geometry.getAttribute('aWIntensity') as BufferAttribute | undefined;
+  const wAlpha = geometry.getAttribute('aWAlpha') as BufferAttribute | undefined;
+  const nextPosition = nextGeometry.getAttribute('position') as BufferAttribute | undefined;
+  const nextNormal = nextGeometry.getAttribute('normal') as BufferAttribute | undefined;
+  const nextWIntensity = nextGeometry.getAttribute('aWIntensity') as BufferAttribute | undefined;
+  const nextWAlpha = nextGeometry.getAttribute('aWAlpha') as BufferAttribute | undefined;
+  if (!position || !normal || !wIntensity || !wAlpha) return false;
+
+  const compatible = Boolean(
+    nextPosition && nextNormal && nextWIntensity && nextWAlpha
+      && nextPosition.count === position.count
+      && nextNormal.count === normal.count
+      && nextWIntensity.count === wIntensity.count
+      && nextWAlpha.count === wAlpha.count,
+  );
+
+  geometry.setAttribute('aNextPosition', new BufferAttribute((compatible ? nextPosition! : position).array, 3));
+  geometry.setAttribute('aNextNormal', new BufferAttribute((compatible ? nextNormal! : normal).array, 3));
+  geometry.setAttribute('aNextWIntensity', new BufferAttribute((compatible ? nextWIntensity! : wIntensity).array, 1));
+  geometry.setAttribute('aNextWAlpha', new BufferAttribute((compatible ? nextWAlpha! : wAlpha).array, 1));
+  return compatible;
 }
 
 function exactGeometryCacheKey(params: Params, progress: number, quality: number) {

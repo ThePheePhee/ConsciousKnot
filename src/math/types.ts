@@ -18,6 +18,7 @@ export type DevCrossingMode = 'projected intersections' | 'hidden 4D passage';
 export type DevSphereMode = 'off' | 'contain ball' | 'radial shell' | 'symmetric shell';
 export type MainMode = 'exact symmetric shell weave' | 'simple knot crossings';
 export type ExactSymmetryGroup = 'D6' | 'D8' | 'D10';
+export type ProductionWeavePreset = 'reference triad' | 'flower lattice' | 'dense shell';
 export type ExactWeavePattern =
   | 'dihedral basket'
   | 'temari orbit'
@@ -91,6 +92,7 @@ export interface Params {
   showWPassage: boolean;
   cameraOrbit: number;
   cameraZoom: number;
+  productionWeavePreset: ProductionWeavePreset;
   mainMode: MainMode;
   exactSymmetryGroup: ExactSymmetryGroup;
   exactTrajectorySize: number;
