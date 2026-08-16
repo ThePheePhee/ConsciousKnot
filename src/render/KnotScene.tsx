@@ -15,7 +15,6 @@ import {
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
-import { buildDeveloperRibbonMesh } from '../geometry/buildDeveloperRibbonMesh';
 import { buildExactSymmetricWeaveMesh } from '../symmetric-weave/mesh';
 import { createControlPanel } from '../controls/ControlPanel';
 import { defaultParams } from '../controls/defaultParams';
@@ -40,7 +39,7 @@ export function KnotScene() {
     camera.position.set(0, 0, 5.5);
 
     const renderer = new WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     renderer.setSize(mount.clientWidth, mount.clientHeight);
     renderer.outputColorSpace = 'srgb';
     mount.appendChild(renderer.domElement);
@@ -58,7 +57,7 @@ export function KnotScene() {
     interactionRig.add(ribbon);
     const exactGeometryCache = new Map<string, BufferGeometry>();
     const cachedExactGeometries = new Set<BufferGeometry>();
-    const maxExactGeometryCacheEntries = 48;
+    const maxExactGeometryCacheEntries = 96;
 
     const core = createCore(params.coreSize);
     core.visible = false;
@@ -161,45 +160,13 @@ export function KnotScene() {
       return geometry;
     };
 
-    const buildSimpleGeometry = () => buildDeveloperRibbonMesh({
-      knots: [
-        params.simpleSourceKnot,
-        params.simpleMidKnot,
-        params.simpleTargetKnot,
-        params.simpleFourthKnot,
-      ].slice(0, Math.round(params.simpleTrajectorySize)),
-      progress: params.transitionProgress,
-      samples: Math.round(params.sampleCount),
-      crossSamples: Math.round(params.crossSamples),
-      width: params.ribbonWidth,
-      liftAmplitude: params.liftAmplitude,
-      projectionDistance4D: params.simpleProjectionDistance4D,
-      simultaneousUncrossings: params.simpleSimultaneousUncrossings,
-      crossingMode: params.simpleCrossingMode,
-      showWPassage: params.showWPassage,
-      sphereMode: params.simpleSphereMode,
-      sphereStrength: params.simpleSphereStrength,
-      sphereRadius: params.simpleSphereRadius,
-      sphereSymmetry: params.simpleSphereSymmetry,
-      selfAvoidance: params.simpleSelfAvoidance,
-      selfAvoidanceStrength: params.simpleSelfAvoidanceStrength,
-      selfAvoidanceIterations: params.simpleSelfAvoidanceIterations,
-      tubeClearance: params.simpleTubeClearance,
-      hideDuringUncrossing: params.simpleHideDuringUncrossing,
-      fourthDimensionDuty: params.simpleFourthDimensionDuty,
-      twistTurns: params.simpleTwistEnabled ? params.simpleTwistTurns : 0,
-    });
-
     const updateGeometry = () => {
-      const geometry = params.mainMode === 'exact symmetric shell weave'
-        ? buildExactGeometry()
-        : buildSimpleGeometry();
-      setRibbonGeometry(geometry);
+      setRibbonGeometry(buildExactGeometry());
     };
 
     const updateUniforms = () => {
       const uniforms = material.uniforms;
-      uniforms.time.value = 0;
+      uniforms.time.value = time * 0.35;
       uniforms.oilSlickStrength.value = params.oilSlickStrength;
       uniforms.fractalStrength.value = params.fractalStrength;
       uniforms.fibreDensity.value = params.fibreDensity;
@@ -331,8 +298,8 @@ export function KnotScene() {
   return (
     <>
       <div className="brand">
-        <h1>ConsciousKnot</h1>
-        <p>Projected 4D rearrangements of spherical ribbon knots, constrained to stay dense, smooth, and luminous.</p>
+        <h1>Thing Replication: Knot of Consciousness</h1>
+        <p>A luminous 4D spherical ribbon weave, cycling through smooth impossible crossings.</p>
       </div>
       <div ref={mountRef} style={{ width: '100vw', height: '100vh' }} />
     </>

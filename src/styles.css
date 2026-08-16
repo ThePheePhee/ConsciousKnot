@@ -27,8 +27,9 @@ canvas {
 
 .brand h1 {
   margin: 0;
-  font-size: clamp(24px, 3vw, 44px);
-  line-height: 0.95;
+  max-width: min(520px, calc(100vw - 360px));
+  font-size: clamp(23px, 2.6vw, 36px);
+  line-height: 1.05;
   letter-spacing: 0;
 }
 
@@ -37,6 +38,17 @@ canvas {
   margin: 10px 0 0;
   color: rgba(232, 246, 255, 0.7);
   font-size: 13px;
+}
+
+@media (max-width: 760px) {
+  .brand h1 {
+    max-width: calc(100vw - 48px);
+    font-size: 24px;
+  }
+
+  .brand p {
+    max-width: calc(100vw - 48px);
+  }
 }
 
 .lil-gui.root {
